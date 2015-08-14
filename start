@@ -1,0 +1,3 @@
+#!/bin/bash
+DEPS=$(pwd)/deps/*/ebin
+erl -pa ./ebin $DEPS ./test -eval "application:start(norm)" -config norm

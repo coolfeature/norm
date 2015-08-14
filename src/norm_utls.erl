@@ -1,4 +1,4 @@
--module(norm_utils).
+-module(norm_utls).
 
 -export([
   get_module/0
@@ -18,14 +18,10 @@
   ,num_to_bin/1
   ,root_dir/0
   ,enabled_dbs/0
-  ,record_origin/1
-  ,record_name/1
-  ,record_names/1
-  ,value_to_string/1
-  ,is_proplist/1
   ,format_calltime/1
 ]).
 
+-define(APP,norm).
 
 %% ----------------------------------------------------------------------------
 %% ----------------------------------------------------------------------------
@@ -119,49 +115,7 @@ enabled_dbs() ->
     Acc ++ [Name] 
   end, [], norm_utils:get_config(dbs)).
 
-record_origin(Name) ->
-  record_origin(Name,enabled_dbs()).
-
-record_origin(Name,[Db|Dbs]) ->
-  Module = get_module(Db),
-  case lists:member(Name,record_names(Module:models())) of
-    true -> Db;
-    false -> record_origin(Name,Dbs)
-  end;
-record_origin(_Name,[]) ->
-  undefined.
-  
-record_names(Records) ->
-  lists:foldl(fun(Record,Acc) ->
-    Acc ++ [record_name(Record)]
-  end, [], Records).
-
-record_name(Record) ->
-  hd(tuple_to_list(Record)).
-
-is_proplist([]) -> 
-  true;
-is_proplist([{_,_}|L]) -> 
-  is_proplist(L);
-is_proplist(_) -> 
-  false.
-
 format_calltime(Time) ->
   Float = Time / 1000000,
   float_to_list(Float,[{decimals,3},compact]).
-
-%% ----------------------------------------------------------------------------
-
-value_to_string(V) when is_atom(V) andalso V /= undefined ->
-  atom_to_list(V);
-value_to_string({V,Dec}) when is_float(V) ->
-  float_to_list(V,[{decimals,Dec}]);
-value_to_string(V) when is_integer(V) ->
-  integer_to_list(V);
-value_to_string(V) when is_list(V) ->
-  V;
-value_to_string(V) when is_binary(V) ->
-  binary_to_list(V);
-value_to_string(_V) ->
-  [].
 
