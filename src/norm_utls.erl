@@ -119,3 +119,28 @@ format_calltime(Time) ->
   Float = Time / 1000000,
   float_to_list(Float,[{decimals,3},compact]).
 
+%% @doc Remove whitespace from binary
+
+trim(Bin= <<C,BinTail/binary>>) ->
+  case is_whitespace(C) of
+    true -> trim(BinTail);
+    false -> trim_tail(Bin)
+  end.
+
+trim_tail(<<C>>) ->
+  case is_whitespace(C) of
+    true -> false;
+    false -> <<C>>
+  end;
+
+trim_tail(<<C,Bin/binary>>) ->
+  case trim_tail(Bin) of
+    false -> trim_tail(<<C>>);
+    BinTail -> <<C,BinTail/binary>>
+  end.
+
+is_whitespace($\s) -> true;
+is_whitespace($\t) -> true;
+is_whitespace($\n) -> true;
+is_whitespace($\r) -> true;
+is_whitespace(_) -> false.

@@ -124,17 +124,19 @@ sql_create_table(Name,Spec) ->
   sql_create_table(Name,Spec,[{ifexists,false}]).
 
 sql_create_table(Name,Spec,Options) ->
-  Fields = field_to_sql(Spec),
+  FieldSpec = maps:get('fields',Spec), 
+  Fields = field_to_sql(FieldSpec),
   Constraints = constraint_to_sql(Spec),
-  concat([<<"CREATE TABLE ">>,options_to_sql({options,ifexists},Options),
-    atom_to_binary(Name),<<" ( ">>,Fields,Constraints,<<" )\n">>]).
+  FieldsConstraints = concat([ Fields , Constraints]),
+  concat([<<"CREATE TABLE ">>,options_to_sql({options,ifexists},Options),<<" ">>,
+    atom_to_binary(Name),<<" ( ">>,FieldsConstraints,<<" )">>]).
  
-field_to_sql(TableSpec) ->
+field_to_sql(FieldsSpec) ->
   lists:foldl(fun(Key,Acc) ->
-    FieldSpec = maps:get(Key,TableSpec),
+    FieldSpec = maps:get(Key,FieldsSpec),
     FldSqlLine = field_to_sql(Key,FieldSpec),     
-    concat([ Acc,FldSqlLine,<<"\n">> ]) 
-  end,<<"">>,maps:keys(TableSpec)).
+    concat([ Acc,FldSqlLine, <<", ">> ]) 
+  end,<<"">>,maps:keys(FieldsSpec)).
 
  %% @doc Get something like 'customer varchar(50) not null'
 
@@ -142,11 +144,14 @@ field_to_sql(Name,FldSpec) ->
   Type = maps:get('type',FldSpec,undefined),
   TypeLine = case Type of
     'varchar' ->
-      concat([<<" VARCHAR(">>,maps:get('length',FldSpec,50),<<")">>]);
+      Length = maps:get('length',FldSpec,50),
+      concat([<<" VARCHAR(">>,norm_utls:num_to_bin(Length),<<")">>]);
     'bigserial' ->
       <<" BIGSERIAL ">>;
     'date' ->
       <<" DATE ">>;
+    'timestamp' -> 
+      <<" TIMESTAMP ">>;
     'bigint' -> 
       <<" BIGINT ">>;
     undefined -> 
@@ -157,45 +162,46 @@ field_to_sql(Name,FldSpec) ->
     false -> <<" NOT NULL ">>;
     true -> <<" NULL ">>
   end,
-  concat([atom_to_binary(Name),<<" ">>,TypeLine,Null,<<",\n">>]).
+  concat([atom_to_binary(Name),<<" ">>,TypeLine,Null]).
 
 %% @doc
 
 constraint_to_sql(TableSpec) ->
   TableConstraints = maps:get('constraints',TableSpec,#{}),
   lists:foldl(fun(Key,Acc) ->
-    Constraints = maps:get(Key,TableConstraints,undefined),
-    ConstraintSql = constraint_to_sql(Key,Constraints),
+    ConstraintSpec = maps:get(Key,TableConstraints,undefined),
+    ConstraintSql = constraint_to_sql(Key,ConstraintSpec),
     concat([ Acc,ConstraintSql ])
   end,<<"">>,maps:keys(TableConstraints)).
 
-constraint_to_sql('pk',Constraints) ->
-  lists:foldl(fun(Constraint,Acc) ->
-   Name = maps:get('name',Constraint,undefined),
-   ConName = if Name =:= undefined -> <<"">>; true -> atom_to_binary(Name) end,
-   Fields = lists:foldl(fun(Field,AccF) ->
-       concat([ AccF,atom_to_binary(Field),<<",">>])
-     end,<<"">>,maps:get('fields',Constraint,[])),
-   concat([ Acc,<<"CONSTRAINT ">>,ConName,<<" PRIMARY KEY (">>,Fields,<<")\n">> ])
-  end,<<"">>,Constraints);
+constraint_to_sql('pk',ConstraintSpecList) ->
+  lists:foldl(fun(ConstraintSpec,Acc) ->
+    Name = maps:get('name',ConstraintSpec,undefined),
+    ConName = if Name =:= undefined -> <<"">>; true -> atom_to_binary(Name) end,
+    Fields = lists:foldl(fun(Field,AccF) ->
+      concat([ AccF,atom_to_binary(Field),<<",">>])
+    end,<<"">>,maps:get('fields',ConstraintSpec,[])),
+    concat([ Acc,<<"CONSTRAINT ">>,ConName,<<" PRIMARY KEY (">>,Fields,<<")">>, 
+    <<",">> ])
+  end,<<"">>,ConstraintSpecList);
 
-constraint_to_sql('fk',Constraints) ->
-  lists:foldl(fun(Constraint,Acc) ->
-    Name = maps:get('name',Constraint,<<"">>),
+constraint_to_sql('fk',ConstraintSpecList) ->
+  lists:foldl(fun(ConstraintSpec,Acc) ->
+    Name = maps:get('name',ConstraintSpec,undefined),
+    ConName = if Name =:= undefined -> <<"">>; true -> atom_to_binary(Name) end,
     Fields = lists:foldl(fun(Field,AccF) ->
         concat([ AccF,atom_to_binary(Field),<<",">>])
-      end,<<"">>,maps:get('fields',Constraint,[])),
-    References = maps:get('references',Constraint,[]),
+      end,<<"">>,maps:get('fields',ConstraintSpec,[])),
+    References = maps:get('references',ConstraintSpec,[]),
     RefTable = atom_to_binary(maps:get('table',References)),
     RefFields = lists:foldl(fun(Field,AccRF) ->
         concat([ AccRF,atom_to_binary(Field),<<",">>])
       end,<<"">>,maps:get('fields',References,[])),
-    Options = maps:get('options',Constraint,<<"">>),
-    concat([ Acc,<<"CONSTRAINT ">>,Name,<<" FOREIGN KEY (">>,Fields,
+    Options = maps:get('options',ConstraintSpec,<<"">>),
+    concat([ Acc,<<"CONSTRAINT ">>,ConName,<<" FOREIGN KEY (">>,Fields,
       <<") REFERENCES ">>,RefTable,<<" (">>,RefFields,<<") ">>,Options,
-      <<"\n">> ])
-  end,<<"">>,Constraints).
-
+    <<",">> ])
+  end,<<"">>,ConstraintSpecList).
 
 %% ----------------------------------------------------------------------------
 %% ----------------------------------------------------------------------------
