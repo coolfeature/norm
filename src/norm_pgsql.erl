@@ -58,7 +58,10 @@ delete(Model) ->
 init() ->
   try
     {ok,start} = transaction()
-    %%,drop_schema(?SCHEMA)
+    ,ensure_schema_exists()
+    ,{ok,commit} = commit()
+    ,{ok,start} = transaction()
+    ,ensure_tables_exist()
     ,{ok,commit} = commit()
   catch Error:Reason ->
     Rollback = rollback(),
@@ -67,15 +70,21 @@ init() ->
 
 models() -> 
   PgSql = #'pgsql'{},
-  maps:keys(PgSql#'pgsql'.'models').
+  Models = PgSql#'pgsql'.'models',
+  create_rank(Models).
 
 %% ---------------------------- TABLESPACE ------------------------------------
 
 %% @doc Drop tablespace schema.
+drop_schema() ->
+  drop_schema(get_schema()).
 
 drop_schema(Schema) ->
+  drop_schema(Schema,#{cascade => true}).
+
+drop_schema(Schema,Ops) ->
   case schema_exists(Schema) of {ok,true} -> 
-    case ?SQUERY(sql_drop_schema(Schema)) of
+    case ?SQUERY(sql_drop_schema(Schema,Ops)) of
       {ok,_,_} -> {ok,{Schema,dropped}}; 
       Error ->
         ?LOG(debug,Error),
@@ -83,14 +92,15 @@ drop_schema(Schema) ->
     end; 
   {ok,false} -> {ok,{Schema,not_exists}} end.
 
-sql_drop_schema(Schema) ->
-  sql_drop_schema(Schema,#{cascade => true}).
 sql_drop_schema(Schema,Opts) ->
-  norm_utls:concat_bin([<<"DROP SCHEMA ">>,
-    options_to_sql(ifexists,Opts),<<" ">>,
-    Schema,<<" ">>,options_to_sql(cascade,Opts),<<";">>]).
+  norm_utls:concat_bin([<<"DROP SCHEMA ">>,options_to_sql(ifexists,Opts),
+  <<" ">>,norm_utls:atom_to_bin(Schema),<<" ">>,options_to_sql(cascade,Opts),
+  <<";">>]).
 
 %% @doc Create tablespace schema.
+
+create_schema() ->
+  create_schema(get_schema()).
 
 create_schema(Schema) ->
   case schema_exists(Schema) of {ok,false} -> 
@@ -105,8 +115,8 @@ create_schema(Schema) ->
 sql_create_schema(Schema) ->
   sql_create_schema(Schema,#{ ifexists => false }).
 sql_create_schema(Schema,Op) ->
-  norm_utls:concat_bin([ <<"CREATE SCHEMA ">>,
-    options_to_sql(ifexists,Op),<<" ">>,Schema,<<";">> ]).
+  norm_utls:concat_bin([ <<"CREATE SCHEMA ">>,options_to_sql(ifexists,Op)
+  ,<<" ">>,norm_utls:atom_to_bin(Schema),<<";">> ]).
 
 schema_exists(Schema) ->
   case ?SQUERY(sql_schema_exists(Schema)) of
@@ -117,7 +127,13 @@ schema_exists(Schema) ->
 
 sql_schema_exists(Schema) ->
   norm_utls:concat_bin([ <<"SELECT schema_name FROM information_schema.schemat"
-  "a WHERE schema_name = '">>,Schema,<<"';">> ]).
+  "a WHERE schema_name = '">>,norm_utls:atom_to_bin(Schema),<<"';">> ]).
+
+ensure_schema_exists() ->
+  case schema_exists(get_schema()) of
+    {ok,true} -> {ok,exists};
+    {ok,false} -> create_schema(get_schema())
+  end.
 
 %% ---------------------------------- CREATE ----------------------------------
 
@@ -126,9 +142,14 @@ create_tables() ->
   ModelMap = PgSql#'pgsql'.'models',
   Keys = create_rank(ModelMap),
   Results = lists:foldl(fun(Key,Acc) -> 
-    Acc ++ [create_table(Key,maps:get(Key,ModelMap))]
+    Acc ++ [create_table(Key)]
   end,[],Keys),
   {ok_error(Results),Results}.
+
+create_table(Name) ->
+  PgSql = #'pgsql'{}, 
+  ModelMap = PgSql#'pgsql'.'models',
+  create_table(Name,maps:get(Name,ModelMap)).
 
 create_table(Name,Spec) when is_map(Spec) ->
   case ?SQUERY(sql_create_table(Name,Spec)) of
@@ -215,10 +236,7 @@ constraint_to_sql('fk',ConstraintSpecList) ->
       end,<<"">>,maps:get('fields',ConstraintSpec,[])),
     FieldsS = strip_comma(Fields),
     References = maps:get('references',ConstraintSpec,[]),
-
     RefFieldsS = fields_sql(References),
-
-
     RefTable = maps:get('table',References),
     RefTableName = table_name(RefTable),
     Name = maps:get('name',ConstraintSpec,undefined),
@@ -253,13 +271,35 @@ sql_drop_table(Table,Op) ->
     ,options_to_sql(ifexists,Op),table_name(Table)
     ,options_to_sql(cascade,Op),<<";">>]).
 
+table_exists(Name) ->
+  case ?SQUERY(sql_table_exists(Name)) of
+    {ok,_ColInfo,[{<<"t">>}]} -> {ok,true};
+    {ok,_ColInfo,[{<<"f">>}]} -> {ok,false};
+    Error -> {error,Error}
+  end.
+
+sql_table_exists(Table) ->
+  norm_utls:concat_bin([ <<"select exists ( select 1 from "
+    "information_schema.tables where table_schema = '">>,
+    norm_utls:atom_to_bin(get_schema()),<<"' and table_name = '">>,
+    norm_utls:atom_to_bin(Table),<<"');">> ]).
+
+ensure_tables_exist() ->
+  lists:foldl(fun(Table,Acc) ->
+    Result = case table_exists(Table) of
+      {ok,true} -> {ok,exists};
+      {ok,false} -> create_table(Table)
+    end,
+    Acc ++ [Result]
+  end,[],models()).
+
 %% ------------------------------- INSERT -------------------------------------
 
 insert(ModelMap) ->
   insert(ModelMap,#{ returning => id }).
 
 insert(ModelMap,Ops) ->
-  Sql = sql_insert(ModelMap,Ops),
+  Sql = sql_insert(ModelMap,Ops), 
   case ?SQUERY(Sql) of
     {ok,_Count,_Cols,[{Id}]} -> {ok,norm_utls:bin_to_num(Id)};
     Error -> {error,Error}
@@ -278,12 +318,13 @@ sql_insert(ModelMap,Ops) ->
         MetaFields = maps:get('fields',ModelSpec),
         MetaVal = maps:get(Key,MetaFields),
         MetaValType = maps:get('type',MetaVal),
-        Quoted = if MapVal =:= <<"NULL">> -> false; true -> quoted(MetaValType) end,  
+        Quoted = if MapVal =:= <<"NULL">> -> false; true -> quoted(MetaValType) end, 
+        Formatted = norm_utls:val_to_bin(MapVal),
         Vs2 = case Quoted of
           true ->
-            norm_utls:concat_bin([ Vs,<<"'">>,MapVal,<<"'">>,<<",">>]);
+            norm_utls:concat_bin([ Vs,<<"'">>,Formatted,<<"'">>,<<",">>]);
           false ->
-            norm_utls:concat_bin([ Vs,MapVal,<<",">>]) 
+            norm_utls:concat_bin([ Vs,Formatted,<<",">>]) 
         end,
         {Fs2,Vs2}
     end
@@ -294,6 +335,27 @@ sql_insert(ModelMap,Ops) ->
     ,FieldsS,<<" ) VALUES ( ">>,ValuesS,<<" ) ">>
     ,options_to_sql(returning,Ops)]).
  
+%% ------------------------------- SELECT -------------------------------------
+
+select(Name,Id) when is_integer(Id) ->
+  select(Name,#{ where => [{'id','=',Id}],order => any,limit => 50,offset => 0}).
+
+select(Name,Where) when is_map(Where) ->
+  Sql = select_sql(Name,Where),
+  case ?SQUERY(Sql) of
+    {ok,Cols,Vals} ->
+      select_to_model(Name,Cols,Vals);
+    Error -> {error,Error}
+  end.
+
+select_sql(Name,Where) ->
+  norm_utls:concat_bin([<<"SELECT * FROM ">>,table_name(Name), where(Name,Where) ++ order_by(OrderBy)
+  ++ case Limit of all -> ""; _ -> " LIMIT " ++ value_to_string(Limit) end 
+  ++ case Offset of 0 -> ""; _ -> " OFFSET " ++ value_to_string(Offset) end.]).
+
+select_to_model(Name,Cols,Vals) ->
+  Model = new(Name).
+
 %% ----------------------------------------------------------------------------
 %% ----------------------------------------------------------------------------
 %% ----------------------------------------------------------------------------
@@ -320,13 +382,31 @@ equery(PoolName,Sql,Params) ->
 %% ----------------------------------------------------------------------------
 
 transaction() ->
-  {ok,start}.
+  case ?SQUERY(sql_transaction()) of
+    {ok,[],[]} -> {ok,start};
+    Error -> {error,Error}
+  end.
+
+sql_transaction() ->
+  <<"BEGIN;\n">>.
 
 commit() ->
-  {ok,commit}.
+  case ?SQUERY(sql_commit()) of
+    {ok,[],[]} -> {ok,commit};
+    Error -> {error,Error}
+  end.
+
+sql_commit() ->
+  <<"COMMIT;">>.
 
 rollback() ->
-  {ok,rollback}.
+  case ?SQUERY(sql_rollback()) of
+    {ok,[],[]} -> {ok,rollback};
+    Error -> {error,Error}
+  end.
+
+sql_rollback() ->
+  <<"ROLLBACK;">>.
 
 %% ----------------------------------------------------------------------------
 
@@ -338,8 +418,7 @@ option_to_sql({ifexists,true}) ->
   <<" IF EXISTS ">>; 
 option_to_sql({ifexists,false}) ->
   <<" IF NOT EXISTS ">>;
-option_to_sql({Key,undefined}) ->
-  ?LOG(debug,{"Undefined Key ",Key}),
+option_to_sql({_Key,undefined}) ->
   <<"">>.
 
 options_to_sql(Key,OptionMap) ->

@@ -57,6 +57,12 @@ get_db_config(Db,Key) ->
   DbConfig = get_value(Db,get_config(dbs),[]),
   get_value(Key,DbConfig,undefined).
 
+set_db_config(Db,Key,Val) ->
+  DbConfig = get_value(Db,get_config(dbs),[]),
+  DbConfigUpdated = lists:keyreplace(tablespace,1,DbConfig,{tablespace,Val}), 
+  NewDbs = lists:keyreplace(Key,1,DbConfig,{Key,DbConfigUpdated}),
+  application:set_env(?APP,dbs,NewDbs).
+
 get_config(Key) ->
   case application:get_env(?APP,Key) of
     {ok,Value} -> Value;
@@ -114,6 +120,19 @@ num_to_bin(Num) when is_float(Num) ->
   float_to_binary(Num);
 num_to_bin(Num) when is_integer(Num) ->
   list_to_binary(integer_to_list(Num)).
+
+val_to_bin(V) when is_atom(V) andalso V /= undefined ->
+  atom_to_bin(V);
+val_to_bin(V) when is_float(V) ->
+  val_to_bin({V,2});
+val_to_bin({V,Dec}) when is_float(V) ->
+  float_to_binary(V,[{decimals,Dec}]);
+val_to_bin(V) when is_integer(V) ->
+  num_to_bin(V);
+val_to_bin(V) when is_list(V) ->
+  list_to_binary(V);
+val_to_bin(V) when is_binary(V) ->
+  V.
 
 concat_bin(List) ->
   erlang:iolist_to_binary(List).

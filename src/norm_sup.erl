@@ -28,7 +28,8 @@ init([]) ->
   Pools = if Dbs /= undefined -> start_pools(Dbs);
     true -> []
   end,
-  run_init(Dbs),
+  InitResults = run_init(Dbs),
+  norm_log:log_term(debug,InitResults),
   {ok,{{one_for_one, 5,10},Pools}}.
 
 %% @doc Starts connection pool
