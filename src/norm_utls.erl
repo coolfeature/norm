@@ -1,26 +1,27 @@
 -module(norm_utls).
 
--export([
-  get_module/0
-  ,get_module/1
-  ,get_db_config/2
-  ,get_db_config/3
-  ,get_config/1
-  ,get_value/3
-  ,remove_dups/1
-  ,format_time/2
-  ,format_date/2
-  ,format_datetime/2
-  ,date_to_erlang/2
-  ,time_to_erlang/2
-  ,datetime_to_erlang/2
-  ,bin_to_num/1
-  ,num_to_bin/1
-  ,root_dir/0
-  ,enabled_dbs/0
-  ,format_calltime/1
-]).
+%%-export([
+%%  get_module/0
+%%  ,get_module/1
+%%  ,get_db_config/2
+%%  ,get_db_config/3
+%%  ,get_config/1
+%%  ,get_value/3
+%%  ,remove_dups/1
+%%  ,format_time/2
+%%  ,format_date/2
+%%  ,format_datetime/2
+%%  ,date_to_erlang/2
+%%  ,time_to_erlang/2
+%%  ,datetime_to_erlang/2
+%%  ,bin_to_num/1
+%%  ,num_to_bin/1
+%%  ,root_dir/0
+%%  ,enabled_dbs/0
+%%  ,format_calltime/1
+%%]).
 
+-compile(export_all).
 -define(APP,norm).
 
 %% ----------------------------------------------------------------------------
@@ -98,6 +99,10 @@ datetime_to_erlang(DateTimeBin,Format) ->
   [Date,Time] = re:split(DateTimeBin," ",[{return,list}]),
   {date_to_erlang(Date,Format),time_to_erlang(Time,Format)}. 
 
+%% ----------------------------------------------------------------------------
+%% ----------------------------- CONVERTERS -----------------------------------
+%% ----------------------------------------------------------------------------
+
 bin_to_num(Bin) ->
   N = binary_to_list(Bin),
   case string:to_float(N) of
@@ -109,6 +114,13 @@ num_to_bin(Num) when is_float(Num) ->
   float_to_binary(Num);
 num_to_bin(Num) when is_integer(Num) ->
   list_to_binary(integer_to_list(Num)).
+
+concat_bin(List) ->
+  erlang:iolist_to_binary(List).
+
+atom_to_bin(Atom) ->
+  atom_to_binary(Atom,'utf8').
+
 
 enabled_dbs() ->
   lists:foldl(fun({Name,_Conf},Acc) -> 
