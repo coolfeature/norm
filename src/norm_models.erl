@@ -36,9 +36,13 @@ pgsql() ->
 mnesia() ->
   #{
     views => #{
-      key => #{ type => 'binary' }
-      ,visits => #{ type => 'integer' }
-      ,reviews => #{ type => 'map' }
-      ,purchases => #{ type => 'map' }
+      key => id
+      ,type => set
+      ,fields => #{
+        id => #{ type => 'binary' }
+        ,visits => #{ type => 'integer' }
+        ,reviews => #{ type => 'map' }
+        ,purchases => #{ type => 'map' }
+      }
     }
   }.

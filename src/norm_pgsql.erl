@@ -51,7 +51,7 @@ save(Model) ->
   Model.
 
 delete(Model) when is_map(Model) ->
-  Name = model_name(Model),
+  Name = norm_utls:model_name(Model),
   Id = maps:get(id,Model),
   delete(Name,Id).
 
@@ -355,7 +355,7 @@ select_to_model(Name,Cols,Vals) ->
     PropList = lists:zip(Fields,Results),
     Model = lists:foldl(fun({FieldBin,ValueBin},ModelMap) ->
       Field = norm_utls:bin_to_atom(FieldBin),
-      FieldType = model_type(Field,ModelMap),
+      FieldType = norm_utls:model_type(Field,ModelMap),
       Value = sql_to_type(FieldType,ValueBin),
       maps:update(Field,Value,ModelMap)
     end,Map,PropList),
@@ -372,7 +372,7 @@ where(Name,Where) ->
       case Tuple of
         {Field,Op,Val} when is_atom(Field)->
           Model = new(Name),
-          FieldType = model_type(Field,Model),
+          FieldType = norm_utls:model_type(Field,Model),
           norm_utls:concat_bin([ 
             norm_utls:val_to_bin(Field),<<" ">>,  
             norm_utls:val_to_bin(Op),<<" ">>,  
@@ -448,15 +448,15 @@ sql_update(Model) ->
       'id' -> <<"">>;
       Field -> 
         Value = maps:get(Key,Model),
-        Type = model_type(Field,Model),
+        Type = norm_utls:model_type(Field,Model),
         norm_utls:concat_bin([Acc,<<" ">>,
           norm_utls:val_to_bin(Field),
           <<" = ">>,type_to_sql(Type,Value),<<",">>])
     end 
   end,<<"">>,maps:keys(Model)),
-  Table = model_name(Model),
+  Table = norm_utls:model_name(Model),
   Id = maps:get(id,Model),
-  IdType = model_type(id,Model),
+  IdType = norm_utls:model_type(id,Model),
   norm_utls:concat_bin([<<"UPDATE ">>,table_name(Table),<<" SET ">>,
     strip_comma(Updates),<<" WHERE id = ">>,type_to_sql(IdType,Id)]).
 
@@ -640,16 +640,6 @@ strip_comma(Binary) ->
   String = binary_to_list(Binary),
   Stripped = string:strip(string:strip(String,both,$ ),both,$,),
   list_to_binary(Stripped).
-
-model_name(Model) ->
-  Meta = maps:get('__meta__',Model),
-  maps:get('name',Meta).
-
-model_type(Field,Model) ->
-  Meta = maps:get('__meta__',Model),
-  MetaFields = maps:get('fields',Meta),
-  FieldMeta = maps:get(Field,MetaFields),
-  maps:get('type',FieldMeta).
 
 ok_error([{ok,_}|Results]) ->
   ok_error(Results);

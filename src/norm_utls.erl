@@ -83,6 +83,16 @@ get_config(Key) ->
     undefined -> undefined 
   end.
 
+model_name(Model) ->
+  Meta = maps:get('__meta__',Model),
+  maps:get('name',Meta).
+
+model_type(Field,Model) ->
+  Meta = maps:get('__meta__',Model),
+  MetaFields = maps:get('fields',Meta),
+  FieldMeta = maps:get(Field,MetaFields),
+  maps:get('type',FieldMeta).
+
 %% ------------
 %% -- UTILITIES 
 %% ------------
