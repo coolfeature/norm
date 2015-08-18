@@ -28,6 +28,10 @@
 %% ----------------------------------------------------------------------------
 %% ----------------------------------------------------------------------------
 
+%% -------
+%% -- NORM  
+%% -------
+
 root_dir() ->
   {ok,Path} = file:get_cwd(),
   Path.
@@ -46,6 +50,16 @@ get_module() ->
     Module -> Module
   end,
   list_to_atom(atom_to_list(?APP) ++ "_" ++ atom_to_list(M)).
+
+enabled_dbs() ->
+  lists:foldl(fun({Name,_Conf},Acc) -> 
+    Acc ++ [Name] 
+  end, [], norm_utils:get_config(dbs)).
+
+
+models(Db) ->
+  ModelsModule = get_config(models),
+  ModelsModule:Db().
 
 get_db_config(Db,Key,Default) ->
   case get_db_config(Db,Key) of
@@ -69,45 +83,24 @@ get_config(Key) ->
     undefined -> undefined 
   end.
 
+%% ------------
+%% -- UTILITIES 
+%% ------------
+
 get_value(Key,PropList,Default) ->
   case lists:keyfind(Key,1,PropList) of
     {_,Value} -> Value;
     _ -> Default
   end.
 
-%% @private
 remove_dups([]) -> 
   [];
 remove_dups([H|T]) -> 
   [H | [X || X <- remove_dups(T), X /= H]].
 
-
-format_time({_,{Hour,Min,Sec}},'iso8601') ->
-  lists:flatten(io_lib:format("~2..0B:~2..0B:~2..0B", [Hour,Min,Sec])).
-
-format_date({{Year,Month,Day},_},'iso8601') ->
-  lists:flatten(io_lib:format("~4..0B-~2..0B-~2..0B", [Year,Month,Day])).
-
-format_datetime(DateTime,Format) ->
-  Date = format_date(DateTime,Format),
-  Time = format_time(DateTime,Format),
-  Date ++ " " ++ Time.
-
-date_to_erlang(Date,'iso8601') ->
-  [Y,M,D] = re:split(Date,"-",[{return,list}]),
-  {list_to_integer(Y),list_to_integer(M),list_to_integer(D)}.
-   
-time_to_erlang(Time,'iso8601') ->
-  [H,M,S] = re:split(Time,":",[{return,list}]),
-  {list_to_integer(H),list_to_integer(M),list_to_integer(S)}.
-
-datetime_to_erlang(DateTimeBin,Format) ->
-  [Date,Time] = re:split(DateTimeBin," ",[{return,list}]),
-  {date_to_erlang(Date,Format),time_to_erlang(Time,Format)}. 
-
-%% ----------------------------------------------------------------------------
-%% ----------------------------- CONVERTERS -----------------------------------
-%% ----------------------------------------------------------------------------
+%% -------------
+%% -- CONVERTERS 
+%% -------------
 
 bin_to_num(Bin) ->
   N = binary_to_list(Bin),
@@ -137,41 +130,56 @@ val_to_bin(V) when is_binary(V) ->
 concat_bin(List) ->
   erlang:iolist_to_binary(List).
 
+bin_to_atom(Bin) ->
+  binary_to_atom(Bin,'utf8').
+
 atom_to_bin(Atom) ->
   atom_to_binary(Atom,'utf8').
 
-
-enabled_dbs() ->
-  lists:foldl(fun({Name,_Conf},Acc) -> 
-    Acc ++ [Name] 
-  end, [], norm_utils:get_config(dbs)).
+%% -------------
+%% -- FORMATTERS 
+%% -------------
 
 format_calltime(Time) ->
   Float = Time / 1000000,
   float_to_list(Float,[{decimals,3},compact]).
 
-%% @doc Remove whitespace from binary
+quote(Bin) ->
+  concat_bin([<<"'">>,Bin,<<"'">>]).
 
-trim(Bin= <<C,BinTail/binary>>) ->
-  case is_whitespace(C) of
-    true -> trim(BinTail);
-    false -> trim_tail(Bin)
-  end.
+%% @todo Get rid of strings - consider using dh_date
 
-trim_tail(<<C>>) ->
-  case is_whitespace(C) of
-    true -> false;
-    false -> <<C>>
-  end;
+format_time({_,{Hour,Min,Sec}},'iso8601') ->
+  Str = lists:flatten(io_lib:format("~2..0B:~2..0B:~2..0B", [Hour,Min,Sec])),
+  val_to_bin(Str).
 
-trim_tail(<<C,Bin/binary>>) ->
-  case trim_tail(Bin) of
-    false -> trim_tail(<<C>>);
-    BinTail -> <<C,BinTail/binary>>
-  end.
+%% @todo Get rid of strings - consider using dh_date
 
-is_whitespace($\s) -> true;
-is_whitespace($\t) -> true;
-is_whitespace($\n) -> true;
-is_whitespace($\r) -> true;
-is_whitespace(_) -> false.
+format_date({{Year,Month,Day},_},'iso8601') ->
+  Str = lists:flatten(io_lib:format("~4..0B-~2..0B-~2..0B", [Year,Month,Day])),
+  val_to_bin(Str).
+
+%% @todo Get rid of strings - consider using dh_date
+
+format_datetime(DateTime,Format) ->
+  Date = format_date(DateTime,Format),
+  Time = format_time(DateTime,Format),
+  val_to_bin(Date ++ " " ++ Time).
+
+%% @todo Get rid of strings - consider using dh_date
+
+date_to_erlang(Date,'iso8601') ->
+  [Y,M,D] = re:split(Date,"-",[{return,list}]),
+  {list_to_integer(Y),list_to_integer(M),list_to_integer(D)}.
+   
+%% @todo Get rid of strings - consider using dh_date
+
+time_to_erlang(Time,'iso8601') ->
+  [H,M,S] = re:split(Time,":",[{return,list}]),
+  {list_to_integer(H),list_to_integer(M),list_to_integer(S)}.
+
+%% @todo Get rid of strings - consider using dh_date
+
+datetime_to_erlang(DateTimeBin,Format) ->
+  [Date,Time] = re:split(DateTimeBin," ",[{return,list}]),
+  {date_to_erlang(Date,Format),time_to_erlang(Time,Format)}.

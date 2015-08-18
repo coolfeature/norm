@@ -9,7 +9,7 @@ compile:
 	$(REBAR) compile
 
 test:
-	export ERL_FLAGS="-config norm"; $(REBAR) skip_deps=true eunit
+	export ERL_FLAGS="-config test/norm_test"; $(REBAR) skip_deps=true eunit
 
 clean:
 	@$(REBAR) clean

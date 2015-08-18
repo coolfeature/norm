@@ -9,32 +9,63 @@
 begin_test() ->
   ok = application:start(norm).
 
-%% ----------------------------------------------------------------------------
-%% ----------------------------- INIT -----------------------------------------
-%% ----------------------------------------------------------------------------
+%% @private Init creates schemas and tables if they do not exist.
 
 init_test() ->
-%%  Dbs = norm_utls:get_config(dbs),
-%%  Pgsql = norm_utls:get_value(pgsql,Dbs,[]),
-%%  Schema = norm_utls:get_value(tablespace,Pgsql,norm_test),
-%%  ?debugFmt("Old Schema: ~p~n",[Schema]),
-%%  norm_utls:set_db_config(pgsql,tablespace,norm_pgsql_test),
-%%  Dbs2 = norm_utls:get_config(dbs),
-%%  Pgsql2 = norm_utls:get_value(pgsql,Dbs2,[]),
-%%  Schema2 = norm_utls:get_value(tablespace,Pgsql2,norm_test),
-%%  ?debugFmt("New Schema: ~p~n",[Schema2]),
   ?assertMatch({ok,_},norm_pgsql:init()).
 
-%% ----------------------------------------------------------------------------
-%% ---------------------------- INSERT ----------------------------------------
-%% ----------------------------------------------------------------------------
+%% @private Insert test 
 
-insert_test() ->  
-
-insert_test() ->  
+insert_new_test() ->  
   User = norm_pgsql:new('user'),
   User1 = maps:update('id',1,User),
   User2 = maps:update('email',<<"szymon.czaja@kfis.co.uk">>,User1),
   User3 = maps:update('password',<<"Password">>,User2),
   ?assertMatch({ok,_},norm_pgsql:insert(User3)).
+
+insert_existing_test() ->  
+  User = norm_pgsql:new('user'),
+  User1 = maps:update('id',1,User),
+  User2 = maps:update('email',<<"szymon.czaja@kfis.co.uk">>,User1),
+  User3 = maps:update('password',<<"Password">>,User2),
+  ?assertMatch({error,_},norm_pgsql:insert(User3)).
+
+%% @private Select test
+
+select_by_id_test() ->
+  ?assertMatch([_User],norm_pgsql:select(user,1)).
+
+select_by_where_test() ->
+  ?assertMatch([_User],norm_pgsql:select(user,#{ where => [{'password','LIKE',"%ass%"}]})).
+
+%% @private Update test
+
+update_test() ->
+  User = norm_pgsql:new('user'),
+  User1 = maps:update('id',1,User),
+  User2 = maps:update('password',<<"NewPassword">>,User1),
+  {ok,Id} = norm_pgsql:update(User2),
+  [Model] = norm_pgsql:select(user,1),
+  ?assertMatch(<<"NewPassword">>,maps:get(password,Model)).
+
+%% @private Delete test 
+
+delete_test() ->
+  ?assertMatch({ok,1},norm_pgsql:delete(user,1)).
+
+%% @private Drop tables
+
+drop_tables_test() ->
+  {_Result,TableResults} = norm_pgsql:drop_tables(),
+  ?assertMatch({ok,TableResults},norm_pgsql:drop_tables()),
+  lists:foldl(fun(TableDropResult,_Acc) -> 
+    ?assertMatch({ok,{_Table,dropped}},TableDropResult)
+  end,[],TableResults).
+
+%% @private Drop schema
+
+drop_schema_test() ->
+  Schema = norm_pgsql:get_schema(),
+  ?debugFmt("Dropping schema ~p~n", [Schema]),
+  ?assertMatch({ok,{Schema,dropped}},norm_pgsql:drop_schema()).
 

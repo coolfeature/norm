@@ -26,22 +26,20 @@
 %]).
 
 -compile(export_all).
--include("include/pgsql.hrl").
 
 -define(SQUERY(Sql),squery(Sql)).
 -define(EQUERY(Sql,Args),equery(Sql,Args)).
 -define(SCHEMA,get_schema()).
 -define(POOL,get_pool()).
 -define(LOG(Level,Term),norm_log:log_term(Level,Term)).
-
+-define(MODELS(),norm_utls:models(pgsql)).
 
 %% ----------------------------------------------------------------------------
 %% --------------------------------- API --------------------------------------
 %% ----------------------------------------------------------------------------
 
 new(Name) ->
-  PgSql = #'pgsql'{},
-  ModelSpec = maps:get(Name,PgSql#'pgsql'.'models',#{}),
+  ModelSpec = maps:get(Name,?MODELS()),
   ModelFields = maps:get('fields',ModelSpec,#{}),
   NullMap = lists:foldl(fun(Key,Map) -> 
     maps:put(Key, <<"NULL">>, Map)
@@ -52,8 +50,10 @@ new(Name) ->
 save(Model) ->  
   Model.
 
-delete(Model) ->
-  Model.
+delete(Model) when is_map(Model) ->
+  Name = model_name(Model),
+  Id = maps:get(id,Model),
+  delete(Name,Id).
 
 init() ->
   try
@@ -69,9 +69,7 @@ init() ->
   end.
 
 models() -> 
-  PgSql = #'pgsql'{},
-  Models = PgSql#'pgsql'.'models',
-  create_rank(Models).
+  create_rank(?MODELS()).
 
 %% ---------------------------- TABLESPACE ------------------------------------
 
@@ -138,18 +136,14 @@ ensure_schema_exists() ->
 %% ---------------------------------- CREATE ----------------------------------
 
 create_tables() ->
-  PgSql = #'pgsql'{}, 
-  ModelMap = PgSql#'pgsql'.'models',
-  Keys = create_rank(ModelMap),
+  Keys = create_rank(?MODELS()),
   Results = lists:foldl(fun(Key,Acc) -> 
     Acc ++ [create_table(Key)]
   end,[],Keys),
   {ok_error(Results),Results}.
 
 create_table(Name) ->
-  PgSql = #'pgsql'{}, 
-  ModelMap = PgSql#'pgsql'.'models',
-  create_table(Name,maps:get(Name,ModelMap)).
+  create_table(Name,maps:get(Name,?MODELS())).
 
 create_table(Name,Spec) when is_map(Spec) ->
   case ?SQUERY(sql_create_table(Name,Spec)) of
@@ -249,9 +243,7 @@ constraint_to_sql('fk',ConstraintSpecList) ->
   end,<<"">>,ConstraintSpecList).
 
 drop_tables() ->
-  PgSql = #'pgsql'{}, 
-  ModelMap = PgSql#'pgsql'.'models',
-  Keys = lists:reverse(create_rank(ModelMap)),
+  Keys = lists:reverse(create_rank(?MODELS())),
   Results = lists:foldl(fun(Key,Acc) -> 
     Acc ++ [drop_table(Key)]
   end,[],Keys),
@@ -302,6 +294,7 @@ insert(ModelMap,Ops) ->
   Sql = sql_insert(ModelMap,Ops), 
   case ?SQUERY(Sql) of
     {ok,_Count,_Cols,[{Id}]} -> {ok,norm_utls:bin_to_num(Id)};
+    {error,{error,error,<<"23505">>,Info,Detail}} -> {error,{Info,Detail}};
     Error -> {error,Error}
   end. 
  
@@ -318,14 +311,8 @@ sql_insert(ModelMap,Ops) ->
         MetaFields = maps:get('fields',ModelSpec),
         MetaVal = maps:get(Key,MetaFields),
         MetaValType = maps:get('type',MetaVal),
-        Quoted = if MapVal =:= <<"NULL">> -> false; true -> quoted(MetaValType) end, 
-        Formatted = norm_utls:val_to_bin(MapVal),
-        Vs2 = case Quoted of
-          true ->
-            norm_utls:concat_bin([ Vs,<<"'">>,Formatted,<<"'">>,<<",">>]);
-          false ->
-            norm_utls:concat_bin([ Vs,Formatted,<<",">>]) 
-        end,
+        Vs2 = norm_utls:concat_bin([Vs
+          ,type_to_sql(MetaValType,MapVal),<<",">>]),
         {Fs2,Vs2}
     end
   end,{<<"">>,<<"">>},maps:keys(ModelMap)),
@@ -338,23 +325,140 @@ sql_insert(ModelMap,Ops) ->
 %% ------------------------------- SELECT -------------------------------------
 
 select(Name,Id) when is_integer(Id) ->
-  select(Name,#{ where => [{'id','=',Id}],order => any,limit => 50,offset => 0}).
+  select(Name,
+    #{ where => [{'id','=',Id}],order => any,limit => 50,offset => 0});
 
-select(Name,Where) when is_map(Where) ->
-  Sql = select_sql(Name,Where),
+select(Name,Predicates) when is_map(Predicates) ->
+  Sql = select_sql(Name,Predicates),
   case ?SQUERY(Sql) of
     {ok,Cols,Vals} ->
       select_to_model(Name,Cols,Vals);
     Error -> {error,Error}
   end.
 
-select_sql(Name,Where) ->
-  norm_utls:concat_bin([<<"SELECT * FROM ">>,table_name(Name), where(Name,Where) ++ order_by(OrderBy)
-  ++ case Limit of all -> ""; _ -> " LIMIT " ++ value_to_string(Limit) end 
-  ++ case Offset of 0 -> ""; _ -> " OFFSET " ++ value_to_string(Offset) end.]).
+select_sql(Name,Predicates) ->
+  Where = maps:get(where,Predicates,undefined),
+  OrderBy = maps:get(order_by,Predicates,undefined),
+  Limit = maps:get(limit,Predicates,undefined),
+  Offset = maps:get(offset,Predicates,undefined),
+  norm_utls:concat_bin([<<"SELECT * FROM ">>,table_name(Name),
+    where(Name,Where),order_by(OrderBy),limit(Limit)
+    ,offset(Offset)]).
+
+%% @doc Convert SELECT result to model Map.
 
 select_to_model(Name,Cols,Vals) ->
-  Model = new(Name).
+  lists:foldl(fun(ResultTuple,Acc) -> 
+    Map = new(Name),
+    Fields = [X || {_,X,_,_,_,_} <- Cols],
+    Results = tuple_to_list(ResultTuple),
+    PropList = lists:zip(Fields,Results),
+    Model = lists:foldl(fun({FieldBin,ValueBin},ModelMap) ->
+      Field = norm_utls:bin_to_atom(FieldBin),
+      FieldType = model_type(Field,ModelMap),
+      Value = sql_to_type(FieldType,ValueBin),
+      maps:update(Field,Value,ModelMap)
+    end,Map,PropList),
+    Acc ++ [Model]
+  end,[],Vals).
+
+%% @todo Allow for nested WHERE predicates 
+
+where(_,undefined) ->
+  <<"">>;
+where(Name,Where) ->
+  WhereSql = lists:foldl(fun(Tuple,Acc) -> 
+    norm_utls:concat_bin([Acc,
+      case Tuple of
+        {Field,Op,Val} when is_atom(Field)->
+          Model = new(Name),
+          FieldType = model_type(Field,Model),
+          norm_utls:concat_bin([ 
+            norm_utls:val_to_bin(Field),<<" ">>,  
+            norm_utls:val_to_bin(Op),<<" ">>,  
+            type_to_sql(FieldType,Val)]);
+        AndEtc when is_atom(AndEtc) ->
+          norm_utls:val_to_bin(AndEtc);
+        {{Y,M,D},undefined} ->
+          type_to_sql({'date',[]},{Y,M,D});
+        {undefined,{H,M,S}} ->
+          type_to_sql({'time',[]},{H,M,S});
+        {{Y,Mt,D},{H,M,S}} ->
+          type_to_sql({'timestamp',[]},{{Y,Mt,D},{H,M,S}})
+      end,
+      <<" ">>]) 
+  end,<<"">>,Where),
+  norm_utls:concat_bin([<<" WHERE ">>,strip_comma(WhereSql)]).  
+
+order_by(undefined) ->
+  <<"">>;
+order_by(OrderBy) ->
+  OrderSql = lists:foldl(fun({Field,Sort},Acc) ->
+    norm_utls:concat_bin([Acc,norm_utls:val_to_bin(Field),<<" ">>,
+    norm_utls:val_to_bin(Sort),<<", ">>])
+  end,<<"">>,OrderBy),
+  norm_utls:concat_bin([<<" ORDER BY ">>,strip_comma(OrderSql)]).  
+
+limit(undefined) ->
+  <<"">>;
+limit(Limit) ->
+  case Limit of all -> <<"">>; _ -> 
+    norm_utls:concat_bin([<<" LIMIT ">>,norm_utls:num_to_bin(Limit)]) end. 
+
+offset(undefined) ->
+  <<"">>;
+offset(Offset) ->
+  case Offset of 0 -> <<"">>; _ ->  
+    norm_utls:concat_bin([<<" OFFSET ">>, norm_utls:num_to_bin(Offset)]) end.
+
+
+%% ----------------------------- DELETE ---------------------------------------
+
+delete(Name,Id) when is_integer(Id) ->
+  delete(Name,#{ where => [{'id','=',Id}]});
+delete(Name,Conditions) when is_map(Conditions) ->
+  case ?SQUERY(delete_sql(Name,Conditions)) of
+    {ok,Count} -> {ok,Count};
+    {error,Error} -> {error,Error}
+  end.
+
+delete_sql(Name,Id) when is_integer(Id) ->
+  delete_sql(Name,[{'id','=',Id}]);
+
+delete_sql(Name,Conditions) when is_map(Conditions) ->
+  Where = maps:get(where,Conditions,undefined),
+  norm_utls:concat_bin([<<"DELETE FROM ">>,
+    table_name(Name),where(Name,Where)]).
+ 
+%% ----------------------------- UPDATE ---------------------------------------
+
+%% @doc Requires id filed for update.
+%% @todo Add more flexibility specifying update criteria.
+
+update(Model) ->
+  case ?SQUERY(sql_update(Model)) of
+    {ok,Count} -> {ok,Count};
+    Error -> {error,Error}
+  end. 
+
+sql_update(Model) ->
+  Updates = lists:foldl(fun(Key,Acc) ->
+    case Key of
+      '__meta__' -> <<"">>;
+      'id' -> <<"">>;
+      Field -> 
+        Value = maps:get(Key,Model),
+        Type = model_type(Field,Model),
+        norm_utls:concat_bin([Acc,<<" ">>,
+          norm_utls:val_to_bin(Field),
+          <<" = ">>,type_to_sql(Type,Value),<<",">>])
+    end 
+  end,<<"">>,maps:keys(Model)),
+  Table = model_name(Model),
+  Id = maps:get(id,Model),
+  IdType = model_type(id,Model),
+  norm_utls:concat_bin([<<"UPDATE ">>,table_name(Table),<<" SET ">>,
+    strip_comma(Updates),<<" WHERE id = ">>,type_to_sql(IdType,Id)]).
 
 %% ----------------------------------------------------------------------------
 %% ----------------------------------------------------------------------------
@@ -425,6 +529,65 @@ options_to_sql(Key,OptionMap) ->
  Val = maps:get(Key,OptionMap,undefined),
  option_to_sql({Key,Val}). 
 
+%% @doc Used when converting erlang terms to SQL query.
+
+type_to_sql(_Type,<<"NULL">>) ->
+  <<"NULL">>;
+type_to_sql(_Type,'undefined') ->
+  <<"NULL">>;
+type_to_sql(_Type,'null') ->
+  <<"NULL">>;
+type_to_sql('bigserial',Value) ->
+  norm_utls:val_to_bin(Value);
+type_to_sql('bigint',Value) ->
+  norm_utls:val_to_bin(Value);
+type_to_sql('integer',Value) ->
+  norm_utls:val_to_bin(Value);
+type_to_sql({Decimal,Opts},Value) when 
+           Decimal =:= 'decimal' 
+    orelse Decimal =:= 'float' 
+    orelse Decimal =:= 'numeric' ->
+  Decimals = norm_utls:get_value(scale,Opts,0),
+  norm_utls:val_to_bin({Value,Decimals});
+type_to_sql('time',Value) ->
+  norm_utls:quote([norm_utls:format_time(Value,'iso8601')]);
+type_to_sql('date',Value) ->
+  norm_utls:quote([norm_utls:format_date(Value,'iso8601')]);
+type_to_sql('timestamp',Value) ->
+  norm_utls:quote([norm_utls:format_datetime(Value,'iso8601')]);
+type_to_sql(_Quoted,Value) ->
+  norm_utls:quote([norm_utls:val_to_bin(Value)]).
+
+
+%% @doc Used when converting SQL query results to Erlang terms.
+
+sql_to_type(_Type,<<"NULL">>) ->
+  <<"NULL">>;
+sql_to_type(_Type,'undefined') ->
+  <<"NULL">>;
+sql_to_type(_Type,'null') ->
+  <<"NULL">>;
+sql_to_type('bigserial',Value) ->
+  norm_utls:bin_to_num(Value);
+sql_to_type('bigint',Value) ->
+  norm_utls:bin_to_num(Value);
+sql_to_type('integer',Value) ->
+  norm_utls:bin_to_num(Value);
+sql_to_type({Decimal,Opts},Value) when 
+           Decimal =:= 'decimal' 
+    orelse Decimal =:= 'float' 
+    orelse Decimal =:= 'numeric' ->
+  Decimals = norm_utls:get_value(scale,Opts,0),
+  norm_utls:bin_to_num({Value,Decimals});
+sql_to_type('time',Value) ->
+  norm_utls:time_to_erlang(Value,'iso8601');
+sql_to_type('date',Value) ->
+  norm_utls:date_to_erlang(Value,'iso8601');
+sql_to_type('timestamp',Value) ->
+  norm_utls:datetime_to_erlang(Value,'iso8601');
+sql_to_type(_Type,Value) ->
+  Value.
+
 %% ----------------------------------------------------------------------------
 %% ----------------------------- UTILITIES ------------------------------------
 %% ----------------------------------------------------------------------------
@@ -463,9 +626,6 @@ fields_sql(Map) ->
   end,<<"">>,maps:get('fields',Map)),
   strip_comma(RefFields).
 
-quoted(Val) ->
-  lists:member(Val,['varchar','timestamp','date']).
-
 table_name(TableName) when is_atom(TableName) ->
   Name = norm_utls:atom_to_bin(TableName),
   Schema = norm_utls:atom_to_bin(get_schema()),
@@ -480,6 +640,16 @@ strip_comma(Binary) ->
   String = binary_to_list(Binary),
   Stripped = string:strip(string:strip(String,both,$ ),both,$,),
   list_to_binary(Stripped).
+
+model_name(Model) ->
+  Meta = maps:get('__meta__',Model),
+  maps:get('name',Meta).
+
+model_type(Field,Model) ->
+  Meta = maps:get('__meta__',Model),
+  MetaFields = maps:get('fields',Meta),
+  FieldMeta = maps:get(Field,MetaFields),
+  maps:get('type',FieldMeta).
 
 ok_error([{ok,_}|Results]) ->
   ok_error(Results);
