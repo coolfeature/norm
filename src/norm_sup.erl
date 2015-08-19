@@ -25,11 +25,7 @@ start_link() ->
 
 init([]) ->
   Dbs = norm_utls:get_config(dbs), 
-  Pools = if Dbs /= undefined -> start_pools(Dbs);
-    true -> []
-  end,
-  InitResults = run_init(Dbs),
-  norm_log:log_term(debug,InitResults),
+  Pools = if Dbs /= undefined -> start_pools(Dbs); true -> [] end,
   {ok,{{one_for_one, 5,10},Pools}}.
 
 %% @doc Starts connection pool
@@ -53,13 +49,4 @@ start_db_pools(Db,Pools) ->
       {worker_module, WorkerName}] ++ SizeArgs,
       poolboy:child_spec(Name,PoolArgs,WorkerArgs)
     end,Pools).
-
-run_init(Dbs) ->
-  lists:foldl(fun({Name,Config},Acc) ->
-    InitResult = case norm_utls:get_value(init,Config,false) of
-      true -> norm:init(Name);
-      _ -> {Name,no_init}
-    end,  
-    Acc ++ [InitResult]
-  end,[],Dbs).
 
