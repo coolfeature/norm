@@ -29,7 +29,7 @@ save(Model) ->
 find(Name,Predicates) when is_map(Predicates) ->
   select(Name,Predicates);
 find(Name,Id) ->
-  read(Name,Id).
+  match(Name,Id).
 
 remove(Model) ->
   Name = norm_utls:model_name(Model),
