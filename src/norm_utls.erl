@@ -59,7 +59,7 @@ enabled_dbs() ->
 
 models(Db) ->
   ModelsModule = get_config(models),
-  ModelsModule:Db().
+  try ModelsModule:Db() catch _:_ -> #{} end.
 
 get_db_config(Db,Key,Default) ->
   case get_db_config(Db,Key) of
@@ -86,6 +86,10 @@ get_config(Key) ->
 model_name(Model) ->
   Meta = maps:get('__meta__',Model),
   maps:get('name',Meta).
+
+model_keys(Model) ->
+  Keys = maps:keys(Model),
+  lists:delete('__meta__',Keys). 
 
 model_type(Field,Model) ->
   Meta = maps:get('__meta__',Model),

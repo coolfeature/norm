@@ -1,4 +1,4 @@
--module(norm_test).
+-module(pgsql_SUITE).
 
 -compile(export_all).
 
@@ -7,7 +7,7 @@
 -define(TEST_MODULE,norm_pgsql).
 
 begin_test() ->
-  ok = application:start(norm).
+  norm_app:ensure_started(norm).
 
 %% @private Init creates schemas and tables if they do not exist.
 
@@ -44,7 +44,7 @@ update_test() ->
   User = norm_pgsql:new('user'),
   User1 = maps:update('id',1,User),
   User2 = maps:update('password',<<"NewPassword">>,User1),
-  {ok,Id} = norm_pgsql:update(User2),
+  {ok,_Id} = norm_pgsql:update(User2),
   [Model] = norm_pgsql:select(user,1),
   ?assertMatch(<<"NewPassword">>,maps:get(password,Model)).
 

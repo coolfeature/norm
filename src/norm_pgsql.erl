@@ -25,6 +25,8 @@
 %  ,get_pool/0
 %]).
 
+-behaviour(norm_behaviour).
+
 -compile(export_all).
 
 -define(SQUERY(Sql),squery(Sql)).
@@ -32,28 +34,11 @@
 -define(SCHEMA,get_schema()).
 -define(POOL,get_pool()).
 -define(LOG(Level,Term),norm_log:log_term(Level,Term)).
--define(MODELS(),norm_utls:models(pgsql)).
+-define(MODELS,norm_utls:models(pgsql)).
 
 %% ----------------------------------------------------------------------------
-%% --------------------------------- API --------------------------------------
+%% ------------------------- BEHAVIOUR CALLBACKS ------------------------------
 %% ----------------------------------------------------------------------------
-
-new(Name) ->
-  ModelSpec = maps:get(Name,?MODELS()),
-  ModelFields = maps:get('fields',ModelSpec,#{}),
-  NullMap = lists:foldl(fun(Key,Map) -> 
-    maps:put(Key, <<"NULL">>, Map)
-  end,ModelFields,maps:keys(ModelFields)),
-  ModelSpecName = maps:put('name',Name,ModelSpec),
-  maps:put('__meta__',ModelSpecName,NullMap).
-
-save(Model) ->  
-  Model.
-
-delete(Model) when is_map(Model) ->
-  Name = norm_utls:model_name(Model),
-  Id = maps:get(id,Model),
-  delete(Name,Id).
 
 init() ->
   try
@@ -68,8 +53,37 @@ init() ->
     ?LOG(info,[Error,Reason,Rollback])
   end.
 
+new(Name) ->
+  ModelSpec = maps:get(Name,?MODELS,undefined),
+  if ModelSpec =:= undefined -> undefined; true ->
+  ModelFields = maps:get('fields',ModelSpec,#{}),
+  NullMap = lists:foldl(fun(Key,Map) -> 
+    maps:put(Key, <<"NULL">>, Map)
+  end,ModelFields,maps:keys(ModelFields)),
+  ModelSpecName = maps:put('name',Name,ModelSpec),
+  maps:put('__meta__',ModelSpecName,NullMap) end.
+
+save(Model) -> 
+  Id = maps:get('id',Model),
+  Name = norm_utls:model_name(Model),
+  Exists = select(Name,Id),
+  case Exists of
+    [_H|_T] -> update(Model);
+    [] -> insert(Model)
+  end.
+
+find(Name,Predicates) when is_map(Predicates) ->
+  select(Name,Predicates);
+find(Name,Id) ->
+  select(Name,Id).
+  
+remove(Model) ->
+  Name = norm_utls:model_name(Model),
+  Id = maps:get(id,Model),
+  delete(Name,Id).
+
 models() -> 
-  create_rank(?MODELS()).
+  create_rank(?MODELS).
 
 %% ---------------------------- TABLESPACE ------------------------------------
 
@@ -136,14 +150,14 @@ ensure_schema_exists() ->
 %% ---------------------------------- CREATE ----------------------------------
 
 create_tables() ->
-  Keys = create_rank(?MODELS()),
+  Keys = create_rank(?MODELS),
   Results = lists:foldl(fun(Key,Acc) -> 
     Acc ++ [create_table(Key)]
   end,[],Keys),
   {ok_error(Results),Results}.
 
 create_table(Name) ->
-  create_table(Name,maps:get(Name,?MODELS())).
+  create_table(Name,maps:get(Name,?MODELS)).
 
 create_table(Name,Spec) when is_map(Spec) ->
   case ?SQUERY(sql_create_table(Name,Spec)) of
@@ -243,7 +257,7 @@ constraint_to_sql('fk',ConstraintSpecList) ->
   end,<<"">>,ConstraintSpecList).
 
 drop_tables() ->
-  Keys = lists:reverse(create_rank(?MODELS())),
+  Keys = lists:reverse(create_rank(?MODELS)),
   Results = lists:foldl(fun(Key,Acc) -> 
     Acc ++ [drop_table(Key)]
   end,[],Keys),
@@ -288,7 +302,9 @@ ensure_tables_exist() ->
 %% ------------------------------- INSERT -------------------------------------
 
 insert(ModelMap) ->
-  insert(ModelMap,#{ returning => id }).
+  Id = maps:get('id',ModelMap,undefined),
+  if Id =:= undefined -> insert(ModelMap,#{});
+  true -> insert(ModelMap,#{ returning => id }) end.
 
 insert(ModelMap,Ops) ->
   Sql = sql_insert(ModelMap,Ops), 
@@ -324,11 +340,19 @@ sql_insert(ModelMap,Ops) ->
  
 %% ------------------------------- SELECT -------------------------------------
 
-select(Name,Id) when is_integer(Id) ->
+select(Model) when is_map(Model) ->
+  Name = norm_ults:model_name(Model),
+  Where = lists:foldl(fun(Key,Acc) ->
+    Val = maps:get(Key,Model),
+    Acc ++ [{Key,'=',Val}]
+  end,[],norm_utls:model_keys(Model)),
+  select(Name,#{ where => Where }).
+
+select(Name,Id) when is_atom(Name), is_integer(Id) ->
   select(Name,
     #{ where => [{'id','=',Id}],order => any,limit => 50,offset => 0});
 
-select(Name,Predicates) when is_map(Predicates) ->
+select(Name,Predicates) when is_atom(Name), is_map(Predicates) ->
   Sql = select_sql(Name,Predicates),
   case ?SQUERY(Sql) of
     {ok,Cols,Vals} ->
@@ -444,7 +468,6 @@ update(Model) ->
 sql_update(Model) ->
   Updates = lists:foldl(fun(Key,Acc) ->
     case Key of
-      '__meta__' -> <<"">>;
       'id' -> <<"">>;
       Field -> 
         Value = maps:get(Key,Model),
@@ -453,9 +476,9 @@ sql_update(Model) ->
           norm_utls:val_to_bin(Field),
           <<" = ">>,type_to_sql(Type,Value),<<",">>])
     end 
-  end,<<"">>,maps:keys(Model)),
+  end,<<"">>,norm_utls:model_keys(Model)),
   Table = norm_utls:model_name(Model),
-  Id = maps:get(id,Model),
+  Id = maps:get('id',Model),
   IdType = norm_utls:model_type(id,Model),
   norm_utls:concat_bin([<<"UPDATE ">>,table_name(Table),<<" SET ">>,
     strip_comma(Updates),<<" WHERE id = ">>,type_to_sql(IdType,Id)]).
@@ -618,7 +641,8 @@ create_rank(Map) ->
     Acc ++ [{Rank,E}]
   end, [], Keys),
   Sorted = lists:sort(List),
-  [Val || {_,Val} <- Sorted].
+  if Sorted =:= [] -> undefined; true ->
+  [Val || {_,Val} <- Sorted] end.
 
 fields_sql(Map) ->
   RefFields = lists:foldl(fun(Field,AccRF) ->

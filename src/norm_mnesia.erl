@@ -2,23 +2,43 @@
 
 -compile(export_all).
 
--define(MODELS(),norm_utls:models(mnesia)).
+-behaviour(norm_behaviour).
+
+-define(MODELS,norm_utls:models(mnesia)).
 
 %% ----------------------------------------------------------------------------
-%% ----------------------------------------------------------------------------
+%% -------------------------- BEHAVIOUR CALLBACKS -----------------------------
 %% ----------------------------------------------------------------------------
 
 init() ->
   create_tables([node()]).
 
 new(Name) ->
-  ModelSpec = maps:get(Name,?MODELS()),
+  ModelSpec = maps:get(Name,?MODELS,undefined),
+  if ModelSpec =:= undefined -> undefined; true ->
   ModelFields = maps:get('fields',ModelSpec,#{}),
   NullMap = lists:foldl(fun(Key,Map) -> 
     maps:put(Key, <<"NULL">>, Map)
   end,ModelFields,maps:keys(ModelFields)),
   ModelSpecName = maps:put('name',Name,ModelSpec),
-  maps:put('__meta__',ModelSpecName,NullMap).
+  maps:put('__meta__',ModelSpecName,NullMap) end.
+
+save(Model) ->
+  write(Model).
+
+find(Name,Predicates) when is_map(Predicates) ->
+  select(Name,Predicates);
+find(Name,Id) ->
+  read(Name,Id).
+
+remove(Model) ->
+  Name = norm_utls:model_name(Model),
+  Id = lists:nth(1,mnesia:table_info(Name,attributes)),
+  delete(Name,Id).
+
+models() ->
+  Models = ?MODELS,
+  if Models=:= #{} -> undefined; true -> Models end.
 
 %% -------------------------------- CREATE ------------------------------------
 
@@ -65,9 +85,12 @@ create_tables(Nodes) ->
   application:start(mnesia),
 
   %% Create tables
-  Tables = lists:foldl(fun(Table,Acc) -> 
-    Acc ++ [{Table,[{attributes,fields(Table)},{Copies,Nodes}]}]
-  end,[],maps:keys(?MODELS())),
+  Models = ?MODELS,
+  Tables = lists:foldl(fun(Table,Acc) ->
+    TableSpec = maps:get(Table,Models),
+    Type = maps:get('type',TableSpec,'set'),
+    Acc ++ [{Table,[{attributes,fields(Table)},{Copies,Nodes},{type,Type}]}]
+  end,[],maps:keys(Models)),
   create_mnesia_table(Tables,[]).
 
 %% @private {@link create_tables/1}. helper. 
@@ -87,7 +110,7 @@ create_mnesia_table([{Name,Atts}|Specs],Created) ->
   end,
   create_mnesia_table(Specs,Result);
 create_mnesia_table([],Created) ->
-  mnesia:wait_for_tables(maps:keys(?MODELS()),5000),
+  mnesia:wait_for_tables(maps:keys(?MODELS),5000),
   {ok_error(Created),Created}.
 
 %% ------------------------------- WRITE --------------------------------------
@@ -120,6 +143,72 @@ match(Name,Id) ->
     {aborted, Reason} -> {error, Reason}
   end.
 
+%% @doc Predicates is a map with with 'where', 'order_by', 'limit' and 'offset'
+%% keys. Use match specification [{MatchHead, [Guard], [Result]}] in where 
+%% eg: [{'$1',[],['$1']}] to select all records.
+%%
+%% @todo Add logging.
+
+select(Name,Predicates) ->
+  Where = maps:get(where,Predicates,all),
+  OrderBy = maps:get(order_by,Predicates,undefined),
+  Limit = maps:get(limit,Predicates,undefined),
+  Offset = maps:get(offset,Predicates,undefined),
+  MatchSpec = if Where =:= [all] -> [{'$1',[],['$1']}]; true -> Where end,
+  RawList = mnesia:dirty_select(Name,MatchSpec),
+  SortedList = case RawList of
+    [H|_T] ->
+      Key = element(1,H),
+      ModelList = tuple_to_model(RawList),
+      Order = if OrderBy =:= undefined -> [{Key,asc}]; true -> OrderBy end,
+      order_by(ModelList,Order);
+    _Empty -> []
+  end,
+  SkippedList = offset(SortedList,Offset),
+  limit(SkippedList,Limit).
+
+%% @doc Applies sorting criteria one after another.
+%% @todo Make sorting more sophisticated.
+
+order_by(Ordered,[{Field,AscDesc}|OrdersBy]) ->
+  case AscDesc of
+    asc ->
+      Fun = fun (A,B) -> maps:get(Field,A) =< maps:get(Field,B) end,
+      Sorted = lists:sort(Fun,Ordered);
+    desc ->
+      Fun = fun (A,B) -> maps:get(Field,A) >= maps:get(Field,B) end,
+      Sorted = lists:sort(Fun,Ordered);
+    _ ->
+      Sorted = Ordered
+    end,
+  order_by(Sorted,OrdersBy);
+order_by(Ordered,[]) ->
+  Ordered.
+  
+offset(List,undefined) -> 
+  List;
+offset(List,Skip) when Skip >= length(List) -> 
+  [];
+offset(List,Skip) -> 
+  lists:nthtail(Skip,List).
+
+limit(List,Max) when is_integer(Max) ->
+  lists:sublist(List,Max);
+limit(List,undeifned) ->
+  List;
+limit(List,_Limit) ->
+  norm_log:log_term(info,"Limit expects a number."),
+  List.
+
+%% ------------------------------ DELETE --------------------------------------
+
+%% @doc Delete by key.
+%% @todo Add delete by query match.
+
+delete(Name,Id) ->
+  Result = mnesia:dirty_delete(Name,Id),
+  {Result,Id}.
+
 %% ----------------------------------------------------------------------------
 %% ---------------------------- CONVERTERS ------------------------------------
 %% ----------------------------------------------------------------------------
@@ -135,6 +224,9 @@ model_to_tuple(Map) ->
 %% @doc This depends on whether the RecordTuple values are in exactly the same 
 %% order as fields from mnesia:table_info(Name,attributes).
 
+tuple_to_model(RecordTuples) when is_list(RecordTuples) ->
+  lists:foldl(fun(Tuple,Acc) -> Acc ++ [tuple_to_model(Tuple)] 
+  end,[],RecordTuples);
 tuple_to_model(RecordTuple) ->
   [Name|Fields] = tuple_to_list(RecordTuple),
   Attributes = mnesia:table_info(Name,attributes),
@@ -149,7 +241,7 @@ tuple_to_model(RecordTuple) ->
 %% ----------------------------------------------------------------------------
 
 fields(Name) ->
-  Map = maps:get(Name,?MODELS()),
+  Map = maps:get(Name,?MODELS),
   Fields = maps:get('fields',Map),
   Keys = maps:keys(Fields),
   Key = maps:get('key',Map,undefined),
