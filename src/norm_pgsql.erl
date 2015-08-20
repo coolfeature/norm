@@ -313,23 +313,38 @@ insert(ModelMap,Ops) ->
     {error,{error,error,<<"23505">>,Info,Detail}} -> {error,{Info,Detail}};
     Error -> {error,Error}
   end. 
+
+%% @doc Insert should insert id value only when it is specified, otherwise 
+%% if the id field is a primary key, postgress should automatically 
+%% update it.
  
 sql_insert(ModelMap,Ops) -> 
   ModelSpec = maps:get('__meta__',ModelMap,#{}),
   ModelName = maps:get('name',ModelSpec),
+  ModelFullSpec = maps:get(ModelName,?MODELS),
+  ModelConstraints = maps:get('constraints',ModelFullSpec),
+  Pk = case maps:get('pk',ModelConstraints,undefined) of
+    undefined -> undefined; Map -> maps:get('fields',Map,undefined) end,
   {Fields,Values} = lists:foldl(fun(Key,{Fs,Vs}) -> 
     case Key of
       '__meta__' -> {Fs,Vs};
-      _ -> 
+      _ ->
+        MapVal = maps:get(Key,ModelMap,undefined),
         Fs2 = norm_utls:concat_bin([ Fs,norm_utls:atom_to_bin(Key),<<",">>]),
-        %%
-        MapVal = maps:get(Key,ModelMap),
         MetaFields = maps:get('fields',ModelSpec),
         MetaVal = maps:get(Key,MetaFields),
         MetaValType = maps:get('type',MetaVal),
         Vs2 = norm_utls:concat_bin([Vs
           ,type_to_sql(MetaValType,MapVal),<<",">>]),
-        {Fs2,Vs2}
+        case lists:member(Key,Pk) of
+          true ->
+            case no_value(MapVal) of
+              true -> {Fs,Vs};
+              false -> {Fs2,Vs2} 
+            end;
+          false ->
+            {Fs2,Vs2}
+        end
     end
   end,{<<"">>,<<"">>},maps:keys(ModelMap)),
   FieldsS = strip_comma(Fields),
@@ -664,6 +679,15 @@ strip_comma(Binary) ->
   String = binary_to_list(Binary),
   Stripped = string:strip(string:strip(String,both,$ ),both,$,),
   list_to_binary(Stripped).
+
+no_value(Val) ->
+  case Val of 
+    undefined -> true;
+    <<"">> -> true;
+    null -> true;
+    <<"NULL">> -> true;
+    _ -> false
+  end.
 
 ok_error([{ok,_}|Results]) ->
   ok_error(Results);
