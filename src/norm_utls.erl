@@ -85,7 +85,7 @@ get_config(Key) ->
 
 model_name(Model) ->
   Meta = maps:get(<<"__meta__">>,Model),
-  maps:get('name',Meta).
+  maps:get(<<"name">>,Meta).
 
 model_keys(Model) ->
   Keys = maps:keys(Model),
@@ -93,9 +93,9 @@ model_keys(Model) ->
 
 model_type(Field,Model) ->
   Meta = maps:get(<<"__meta__">>,Model),
-  MetaFields = maps:get('fields',Meta),
+  MetaFields = maps:get(<<"fields">>,Meta),
   FieldMeta = maps:get(Field,MetaFields),
-  maps:get('type',FieldMeta).
+  maps:get(<<"type">>,FieldMeta).
 
 %% ------------
 %% -- UTILITIES 

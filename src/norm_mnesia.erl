@@ -16,11 +16,11 @@ init() ->
 new(Name) ->
   ModelSpec = maps:get(Name,?MODELS,undefined),
   if ModelSpec =:= undefined -> undefined; true ->
-  ModelFields = maps:get('fields',ModelSpec,#{}),
+  ModelFields = maps:get(<<"fields">>,ModelSpec,#{}),
   NullMap = lists:foldl(fun(Key,Map) -> 
     maps:put(Key, <<"NULL">>, Map)
   end,ModelFields,maps:keys(ModelFields)),
-  ModelSpecName = maps:put('name',Name,ModelSpec),
+  ModelSpecName = maps:put(<<"name">>,Name,ModelSpec),
   maps:put(<<"__meta__">>,ModelSpecName,NullMap) end.
 
 save(Model) ->
@@ -88,7 +88,7 @@ create_tables(Nodes) ->
   Models = ?MODELS,
   Tables = lists:foldl(fun(TableNameBin,Acc) ->
     TableSpec = maps:get(TableNameBin,Models),
-    Type = maps:get('type',TableSpec,'set'),
+    Type = norm_utls:bin_to_atom(maps:get(<<"type">>,TableSpec,<<"set">>)),
     TableName = norm_utls:bin_to_atom(TableNameBin),
     Fields = fields(TableNameBin),
     Acc ++ [{TableName,[{attributes,Fields}
@@ -141,7 +141,8 @@ write(Maps) when is_list(Maps) ->
 %% ------------------------------- FIND ---------------------------------------
 
 match(Name,Id) ->
-  Fun = fun() -> mnesia:read(Name,Id) end,
+  NameAtom = norm_utls:bin_to_atom(Name),
+  Fun = fun() -> mnesia:read(NameAtom,Id) end,
   case mnesia:transaction(Fun) of
     {atomic,Result} -> Result;
     {aborted, Reason} -> {error, Reason}
@@ -159,7 +160,8 @@ select(Name,Predicates) ->
   Limit = maps:get(limit,Predicates,undefined),
   Offset = maps:get(offset,Predicates,undefined),
   MatchSpec = if Where =:= [all] -> [{'$1',[],['$1']}]; true -> Where end,
-  RawList = mnesia:dirty_select(Name,MatchSpec),
+  NameAtom = norm_utls:bin_to_atom(Name),
+  RawList = mnesia:dirty_select(NameAtom,MatchSpec),
   SortedList = case RawList of
     [H|_T] ->
       Key = element(1,H),
@@ -210,7 +212,8 @@ limit(List,_Limit) ->
 %% @todo Add delete by query match.
 
 delete(Name,Id) ->
-  Result = mnesia:dirty_delete(Name,Id),
+  NameAtom = norm_utls:bin_to_atom(Name),
+  Result = mnesia:dirty_delete(NameAtom,Id),
   {Result,Id}.
 
 %% ----------------------------------------------------------------------------
@@ -248,11 +251,11 @@ tuple_to_model(RecordTuple) ->
 
 fields(Name) ->
   Map = maps:get(Name,?MODELS),
-  Fields = maps:get('fields',Map),
+  Fields = maps:get(<<"fields">>,Map),
   FieldsBin = maps:keys(Fields),
   Keys = lists:foldl(fun(FBin,Acc) -> 
     Acc ++ [norm_utls:bin_to_atom(FBin)] end,[],FieldsBin),
-  Key = maps:get('key',Map,undefined),
+  Key = maps:get(<<"key">>,Map,undefined),
   if Key =:= undefined -> Keys; 
   true -> 
     [H|_T] = Keys,

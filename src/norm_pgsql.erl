@@ -57,11 +57,11 @@ init() ->
 new(Name) ->
   ModelSpec = maps:get(Name,?MODELS,undefined),
   if ModelSpec =:= undefined -> undefined; true ->
-  ModelFields = maps:get('fields',ModelSpec,#{}),
+  ModelFields = maps:get(<<"fields">>,ModelSpec,#{}),
   NullMap = lists:foldl(fun(Key,Map) -> 
     maps:put(Key, <<"NULL">>, Map)
   end,ModelFields,maps:keys(ModelFields)),
-  ModelSpecName = maps:put('name',Name,ModelSpec),
+  ModelSpecName = maps:put(<<"name">>,Name,ModelSpec),
   maps:put(<<"__meta__">>,ModelSpecName,NullMap) end.
 
 save(Model) -> 
@@ -98,7 +98,7 @@ drop_schema() ->
   drop_schema(get_schema()).
 
 drop_schema(Schema) ->
-  drop_schema(Schema,#{cascade => true}).
+  drop_schema(Schema,#{ <<"cascade">> => <<"true">>}).
 
 drop_schema(Schema,Ops) ->
   case schema_exists(Schema) of {ok,true} -> 
@@ -111,8 +111,8 @@ drop_schema(Schema,Ops) ->
   {ok,false} -> {ok,{Schema,not_exists}} end.
 
 sql_drop_schema(Schema,Opts) ->
-  norm_utls:concat_bin([<<"DROP SCHEMA ">>,options_to_sql(ifexists,Opts),
-  <<" ">>,norm_utls:atom_to_bin(Schema),<<" ">>,options_to_sql(cascade,Opts),
+  norm_utls:concat_bin([<<"DROP SCHEMA ">>,options_to_sql(<<"ifexists">>,Opts),
+  <<" ">>,Schema,<<" ">>,options_to_sql(<<"cascade">>,Opts),
   <<";">>]).
 
 %% @doc Create tablespace schema.
@@ -131,10 +131,10 @@ create_schema(Schema) ->
   {ok,true} -> {ok,{Schema,exists}} end.
     
 sql_create_schema(Schema) ->
-  sql_create_schema(Schema,#{ ifexists => false }).
+  sql_create_schema(Schema,#{ <<"ifexists">> => <<"false">> }).
 sql_create_schema(Schema,Op) ->
-  norm_utls:concat_bin([ <<"CREATE SCHEMA ">>,options_to_sql(ifexists,Op)
-  ,<<" ">>,norm_utls:atom_to_bin(Schema),<<";">> ]).
+  norm_utls:concat_bin([ <<"CREATE SCHEMA ">>,options_to_sql(<<"ifexists">>,Op)
+  ,<<" ">>,Schema,<<";">> ]).
 
 schema_exists(Schema) ->
   case ?SQUERY(sql_schema_exists(Schema)) of
@@ -145,7 +145,7 @@ schema_exists(Schema) ->
 
 sql_schema_exists(Schema) ->
   norm_utls:concat_bin([ <<"SELECT schema_name FROM information_schema.schemat"
-  "a WHERE schema_name = '">>,norm_utls:atom_to_bin(Schema),<<"';">> ]).
+  "a WHERE schema_name = '">>,Schema,<<"';">> ]).
 
 ensure_schema_exists() ->
   case schema_exists(get_schema()) of
@@ -174,11 +174,11 @@ create_table(Name,Spec) when is_map(Spec) ->
   end.
 
 sql_create_table(Name,Spec) ->
-  sql_create_table(Name,Spec,#{ifexists => false}).
+  sql_create_table(Name,Spec,#{ <<"ifexists">> => <<"false">> }).
 
 sql_create_table(Name,Spec,Options) ->
   TableName = table_name(Name),
-  FieldSpec = maps:get('fields',Spec), 
+  FieldSpec = maps:get(<<"fields">>,Spec), 
   Fields = field_to_sql(FieldSpec),
   Constraints = constraint_to_sql(Spec),
   FieldsConstraints = strip_comma(norm_utls:concat_bin([Fields,Constraints])),
@@ -196,34 +196,33 @@ field_to_sql(FieldsSpec) ->
  %% @doc Get something like 'customer varchar(50) not null'
 
 field_to_sql(Name,FldSpec) ->
-  Type = maps:get('type',FldSpec,undefined),
+  Type = maps:get(<<"type">>,FldSpec,undefined),
   TypeLine = case Type of
-    'varchar' ->
-      Length = maps:get('length',FldSpec,50),
-      norm_utls:concat_bin([<<" VARCHAR(">>,norm_utls:num_to_bin(Length),
-        <<")">>]);
-    'bigserial' ->
+    <<"varchar">> ->
+      Length = maps:get(<<"length">>,FldSpec,<<"50">>),
+      norm_utls:concat_bin([<<" VARCHAR(">>,Length,<<")">>]);
+    <<"bigserial">> ->
       <<" BIGSERIAL ">>;
-    'date' ->
+    <<"date">> ->
       <<" DATE ">>;
-    'timestamp' -> 
+    <<"timestamp">> -> 
       <<" TIMESTAMP ">>;
-    'bigint' -> 
+    <<"bigint">> -> 
       <<" BIGINT ">>;
     undefined -> 
       <<"">>
   end,
-  Null = case maps:get('null',FldSpec,undefined) of
+  Null = case maps:get(<<"null">>,FldSpec,undefined) of
     undefined -> <<" NULL ">>;
-    false -> <<" NOT NULL ">>;
-    true -> <<" NULL ">>
+    <<"false">> -> <<" NOT NULL ">>;
+    <<"true">> -> <<" NULL ">>
   end,
   norm_utls:concat_bin([Name,<<" ">>,TypeLine,Null]).
 
 %% @doc
 
 constraint_to_sql(TableSpec) ->
-  TableConstraints = maps:get('constraints',TableSpec,#{}),
+  TableConstraints = maps:get(<<"constraints">>,TableSpec,#{}),
   lists:foldl(fun(Key,Acc) ->
     ConstraintSpec = maps:get(Key,TableConstraints,undefined),
     ConstraintSql = constraint_to_sql(Key,ConstraintSpec),
@@ -232,30 +231,30 @@ constraint_to_sql(TableSpec) ->
 
 %% @doc There can only be one PK defined. The Constraint Spec is a Map.
 
-constraint_to_sql('pk',ConstraintSpec) ->
-  Name = maps:get('name',ConstraintSpec,undefined),
-  ConName = if Name =:= undefined -> constraint_name(['pk']); true -> Name end,
+constraint_to_sql(<<"pk">>,ConstraintSpec) ->
+  Name = maps:get(<<"name">>,ConstraintSpec,undefined),
+  ConName = if Name =:= undefined -> constraint_name([<<"pk">>]); true -> Name end,
   Fields = lists:foldl(fun(Field,AccF) ->
     norm_utls:concat_bin([ <<",">>,Field,AccF])
-  end,<<"">>,maps:get('fields',ConstraintSpec,[])),
+  end,<<"">>,maps:get(<<"fields">>,ConstraintSpec,[])),
   FieldsS = strip_comma(Fields),
   norm_utls:concat_bin([ <<",">>,<<"CONSTRAINT ">>,ConName,<<" PRIMARY KEY (">>
     ,FieldsS,<<")">> ]);
 
-constraint_to_sql('fk',ConstraintSpecList) ->
+constraint_to_sql(<<"fk">>,ConstraintSpecList) ->
   lists:foldl(fun(ConstraintSpec,Acc) ->
     Fields = lists:foldl(fun(Field,AccF) ->
         norm_utls:concat_bin([ AccF,Field,<<",">>])
-      end,<<"">>,maps:get('fields',ConstraintSpec,[])),
+      end,<<"">>,maps:get(<<"fields">>,ConstraintSpec,[])),
     FieldsS = strip_comma(Fields),
-    References = maps:get('references',ConstraintSpec,[]),
+    References = maps:get(<<"references">>,ConstraintSpec,[]),
     RefFieldsS = fields_sql(References),
-    RefTable = maps:get('table',References),
+    RefTable = maps:get(<<"table">>,References),
     RefTableName = table_name(RefTable),
-    Name = maps:get('name',ConstraintSpec,undefined),
-    ConName = if Name =:= undefined -> constraint_name(['fk',RefTable]); 
+    Name = maps:get(<<"name">>,ConstraintSpec,undefined),
+    ConName = if Name =:= undefined -> constraint_name([<<"fk">>,RefTable]); 
       true -> norm_utls:atom_to_bin(Name) end,
-    Options = maps:get('options',ConstraintSpec,<<"">>),
+    Options = maps:get(<<"options">>,ConstraintSpec,<<"">>),
     norm_utls:concat_bin([ <<",">>,<<"CONSTRAINT ">>,ConName,
       <<" FOREIGN KEY (">>,FieldsS,<<") REFERENCES ">>,RefTableName,<<" (">>,
       RefFieldsS,<<") ">>,Options,Acc ])
@@ -269,7 +268,7 @@ drop_tables() ->
   {ok_error(Results),Results}.
  
 drop_table(Table) ->
-  Sql = sql_drop_table(Table,#{ifexists => true,cascade => true}),
+  Sql = sql_drop_table(Table,#{ <<"ifexists">> => <<"true">>,<<"cascade">> => <<"true">>}),
   case ?SQUERY(Sql) of
     {ok,_,_} -> {ok,{Table,dropped}};
     Error -> 
@@ -279,8 +278,8 @@ drop_table(Table) ->
 
 sql_drop_table(Table,Op) ->
   norm_utls:concat_bin([<<"DROP TABLE ">>
-    ,options_to_sql(ifexists,Op),table_name(Table)
-    ,options_to_sql(cascade,Op),<<";">>]).
+    ,options_to_sql(<<"ifexists">>,Op),table_name(Table)
+    ,options_to_sql(<<"cascade">>,Op),<<";">>]).
 
 table_exists(Name) ->
   case ?SQUERY(sql_table_exists(Name)) of
@@ -292,7 +291,7 @@ table_exists(Name) ->
 sql_table_exists(Table) ->
   norm_utls:concat_bin([ <<"select exists ( select 1 from "
     "information_schema.tables where table_schema = '">>,
-    norm_utls:atom_to_bin(get_schema()),<<"' and table_name = '">>,
+    get_schema(),<<"' and table_name = '">>,
     Table,<<"');">> ]).
 
 ensure_tables_exist() ->
@@ -310,7 +309,7 @@ insert(ModelMap) ->
   %% @todo id is hardcoded
   Id = maps:get(<<"id">>,ModelMap,undefined),
   if Id =:= undefined -> insert(ModelMap,#{});
-  true -> insert(ModelMap,#{ returning => id }) end.
+  true -> insert(ModelMap,#{ <<"returning">> => <<"id">> }) end.
 
 insert(ModelMap,Ops) ->
   Sql = sql_insert(ModelMap,Ops), 
@@ -326,20 +325,20 @@ insert(ModelMap,Ops) ->
  
 sql_insert(ModelMap,Ops) -> 
   ModelSpec = maps:get(<<"__meta__">>,ModelMap,#{}),
-  ModelName = maps:get('name',ModelSpec),
+  ModelName = maps:get(<<"name">>,ModelSpec),
   ModelFullSpec = maps:get(ModelName,?MODELS),
-  ModelConstraints = maps:get('constraints',ModelFullSpec),
-  Pk = case maps:get('pk',ModelConstraints,undefined) of
-    undefined -> undefined; Map -> maps:get('fields',Map,undefined) end,
+  ModelConstraints = maps:get(<<"constraints">>,ModelFullSpec),
+  Pk = case maps:get(<<"pk">>,ModelConstraints,undefined) of
+    undefined -> undefined; Map -> maps:get(<<"fields">>,Map,undefined) end,
   {Fields,Values} = lists:foldl(fun(Key,{Fs,Vs}) -> 
     case Key of
       <<"__meta__">> -> {Fs,Vs};
       _ ->
         MapVal = maps:get(Key,ModelMap,undefined),
         Fs2 = norm_utls:concat_bin([ Fs,Key,<<",">>]),
-        MetaFields = maps:get('fields',ModelSpec),
+        MetaFields = maps:get(<<"fields">>,ModelSpec),
         MetaVal = maps:get(Key,MetaFields),
-        MetaValType = maps:get('type',MetaVal),
+        MetaValType = maps:get(<<"type">>,MetaVal),
         %%
        %%
         Vs2 = norm_utls:concat_bin([Vs
@@ -354,7 +353,7 @@ sql_insert(ModelMap,Ops) ->
                 %%                   v              
                 %% SELECT nextval('the_primary_key_sequence');
                 %%
-                case lists:member(MetaValType,[serial,bigserial]) of 
+                case lists:member(MetaValType,[<<"serial">>,<<"bigserial">>]) of 
                   true -> norm_log:log_term(warning,"Ensure PK matches value r"
                     "eturned by nextval('seq_name').");
                   false -> []
@@ -370,7 +369,7 @@ sql_insert(ModelMap,Ops) ->
   ValuesS = strip_comma(Values),
   norm_utls:concat_bin([<<"INSERT INTO ">>,table_name(ModelName),<<" ( ">>
     ,FieldsS,<<" ) VALUES ( ">>,ValuesS,<<" ) ">>
-    ,options_to_sql(returning,Ops)]).
+    ,options_to_sql(<<"returning">>,Ops)]).
  
 %% ------------------------------- SELECT -------------------------------------
 
@@ -431,17 +430,17 @@ where(Name,Where) ->
           Model = new(Name),
           FieldType = norm_utls:model_type(Field,Model),
           norm_utls:concat_bin([ 
-            norm_utls:val_to_bin(Field),<<" ">>,  
-            norm_utls:val_to_bin(Op),<<" ">>,  
+            Field,<<" ">>,  
+            norm_utls:atom_to_bin(Op),<<" ">>,  
             type_to_sql(FieldType,Val)]);
         AndEtc when is_atom(AndEtc) ->
           norm_utls:val_to_bin(AndEtc);
         {{Y,M,D},undefined} ->
-          type_to_sql({'date',[]},{Y,M,D});
+          type_to_sql({<<"date">>,[]},{Y,M,D});
         {undefined,{H,M,S}} ->
-          type_to_sql({'time',[]},{H,M,S});
+          type_to_sql({<<"time">>,[]},{H,M,S});
         {{Y,Mt,D},{H,M,S}} ->
-          type_to_sql({'timestamp',[]},{{Y,Mt,D},{H,M,S}})
+          type_to_sql({<<"timestamp">>,[]},{{Y,Mt,D},{H,M,S}})
       end,
       <<" ">>]) 
   end,<<"">>,Where),
@@ -506,7 +505,7 @@ sql_update(Model) ->
         Value = maps:get(Key,Model),
         Type = norm_utls:model_type(Field,Model),
         norm_utls:concat_bin([Acc,<<" ">>,
-          norm_utls:val_to_bin(Field),
+          Field,
           <<" = ">>,type_to_sql(Type,Value),<<",">>])
     end 
   end,<<"">>,norm_utls:model_keys(Model)),
@@ -571,15 +570,15 @@ sql_rollback() ->
 
 %% ----------------------------------------------------------------------------
 
-option_to_sql({returning,undefined}) ->
+option_to_sql({<<"returning">>,undefined}) ->
   <<"">>;
-option_to_sql({returning,What}) ->
-  norm_utls:concat_bin([<<" RETURNING ">>,norm_utls:atom_to_bin(What),<<" ">>]);
-option_to_sql({cascade,true}) -> 
+option_to_sql({<<"returning">>,What}) ->
+  norm_utls:concat_bin([<<" RETURNING ">>,What,<<" ">>]);
+option_to_sql({<<"cascade">>,<<"true">>}) -> 
   <<" CASCADE ">>;
-option_to_sql({ifexists,true}) ->
+option_to_sql({<<"ifexists">>,<<"true">>}) ->
   <<" IF EXISTS ">>; 
-option_to_sql({ifexists,false}) ->
+option_to_sql({<<"ifexists">>,<<"false">>}) ->
   <<" IF NOT EXISTS ">>;
 option_to_sql({_Key,undefined}) ->
   <<"">>.
@@ -596,23 +595,23 @@ type_to_sql(_Type,'undefined') ->
   <<"NULL">>;
 type_to_sql(_Type,'null') ->
   <<"NULL">>;
-type_to_sql('bigserial',Value) ->
+type_to_sql(<<"bigserial">>,Value) ->
   norm_utls:val_to_bin(Value);
-type_to_sql('bigint',Value) ->
+type_to_sql(<<"bigint">>,Value) ->
   norm_utls:val_to_bin(Value);
-type_to_sql('integer',Value) ->
+type_to_sql(<<"integer">>,Value) ->
   norm_utls:val_to_bin(Value);
 type_to_sql({Decimal,Opts},Value) when 
-           Decimal =:= 'decimal' 
-    orelse Decimal =:= 'float' 
-    orelse Decimal =:= 'numeric' ->
+           Decimal =:= <<"decimal">> 
+    orelse Decimal =:= <<"float">> 
+    orelse Decimal =:= <<"numeric">> ->
   Decimals = norm_utls:get_value(scale,Opts,0),
   norm_utls:val_to_bin({Value,Decimals});
-type_to_sql('time',Value) ->
+type_to_sql(<<"time">>,Value) ->
   norm_utls:quote([norm_utls:format_time(Value,'iso8601')]);
-type_to_sql('date',Value) ->
+type_to_sql(<<"date">>,Value) ->
   norm_utls:quote([norm_utls:format_date(Value,'iso8601')]);
-type_to_sql('timestamp',Value) ->
+type_to_sql(<<"timestamp">>,Value) ->
   norm_utls:quote([norm_utls:format_datetime(Value,'iso8601')]);
 type_to_sql(_Quoted,Value) ->
   norm_utls:quote([norm_utls:val_to_bin(Value)]).
@@ -626,23 +625,23 @@ sql_to_type(_Type,'undefined') ->
   <<"NULL">>;
 sql_to_type(_Type,'null') ->
   <<"NULL">>;
-sql_to_type('bigserial',Value) ->
+sql_to_type(<<"bigserial">>,Value) ->
   norm_utls:bin_to_num(Value);
-sql_to_type('bigint',Value) ->
+sql_to_type(<<"bigint">>,Value) ->
   norm_utls:bin_to_num(Value);
-sql_to_type('integer',Value) ->
+sql_to_type(<<"integer">>,Value) ->
   norm_utls:bin_to_num(Value);
 sql_to_type({Decimal,Opts},Value) when 
-           Decimal =:= 'decimal' 
-    orelse Decimal =:= 'float' 
-    orelse Decimal =:= 'numeric' ->
+           Decimal =:= <<"decimal">> 
+    orelse Decimal =:= <<"float">> 
+    orelse Decimal =:= <<"numeric">> ->
   Decimals = norm_utls:get_value(scale,Opts,0),
   norm_utls:bin_to_num({Value,Decimals});
-sql_to_type('time',Value) ->
+sql_to_type(<<"time">>,Value) ->
   norm_utls:time_to_erlang(Value,'iso8601');
-sql_to_type('date',Value) ->
+sql_to_type(<<"date">>,Value) ->
   norm_utls:date_to_erlang(Value,'iso8601');
-sql_to_type('timestamp',Value) ->
+sql_to_type(<<"timestamp">>,Value) ->
   norm_utls:datetime_to_erlang(Value,'iso8601');
 sql_to_type(_Type,Value) ->
   Value.
@@ -653,8 +652,10 @@ sql_to_type(_Type,Value) ->
 
 get_schema() ->
   case norm_utls:get_db_config(pgsql,tablespace) of
-    undefined -> norm;
-    Schema -> Schema
+    undefined -> <<"norm">>;
+    Schema when is_binary(Schema) -> Schema;
+    Schema when is_atom(Schema) -> norm_utls:atom_to_bin(Schema);
+    Schema when is_list(Schema) -> list_to_binary(Schema)
   end.
 
 constraint_name(NameTokens) when is_list(NameTokens) ->
@@ -672,8 +673,7 @@ create_rank(Map) ->
   Keys = maps:keys(Map),
   List = lists:foldl(fun(E,Acc) -> 
     Table = maps:get(E,Map),
-    RankVal = maps:get(create_rank,Table,undefined),
-    Rank = if RankVal =:= undefined -> 0; true -> RankVal end,
+    Rank = norm_utls:bin_to_num(maps:get(<<"create_rank">>,Table,<<"0">>)),
     Acc ++ [{Rank,E}]
   end, [], Keys),
   Sorted = lists:sort(List),
@@ -683,12 +683,11 @@ create_rank(Map) ->
 fields_sql(Map) ->
   RefFields = lists:foldl(fun(Field,AccRF) ->
     norm_utls:concat_bin([ AccRF,Field,<<",">>]) 
-  end,<<"">>,maps:get('fields',Map)),
+  end,<<"">>,maps:get(<<"fields">>,Map)),
   strip_comma(RefFields).
 
 table_name(TableName) when is_binary(TableName) ->
-  Schema = norm_utls:atom_to_bin(get_schema()),
-  norm_utls:concat_bin([ Schema, <<".">>, TableName ]).
+  norm_utls:concat_bin([ get_schema(), <<".">>, TableName ]).
 
 get_pool() ->
   Pools = norm_utls:get_db_config(pgsql,pools),

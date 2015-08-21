@@ -27,13 +27,13 @@ write_new_test() ->
 %% @private Select test
 
 match_by_id_test() ->
-  ?assertMatch([_Visit],norm_mnesia:match(views,1)).
+  ?assertMatch([_Visit],norm_mnesia:match(<<"views">>,1)).
 
 select_by_where_test() ->
-  ?assertMatch([_Visit],norm_mnesia:select(views,#{ where => [{'$1',[],['$1']}]})).
+  ?assertMatch([_Visit],norm_mnesia:select(<<"views">>,#{ where => [{'$1',[],['$1']}]})).
 
 %% @private Delete test 
 
 delete_test() ->
-  ?assertMatch({ok,1},norm_mnesia:delete(views,1)).
+  ?assertMatch({ok,1},norm_mnesia:delete(<<"views">>,1)).
 
