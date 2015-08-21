@@ -21,7 +21,7 @@ new(Name) ->
     maps:put(Key, <<"NULL">>, Map)
   end,ModelFields,maps:keys(ModelFields)),
   ModelSpecName = maps:put('name',Name,ModelSpec),
-  maps:put('__meta__',ModelSpecName,NullMap) end.
+  maps:put(<<"__meta__">>,ModelSpecName,NullMap) end.
 
 save(Model) ->
   write(Model).
