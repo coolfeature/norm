@@ -33,18 +33,18 @@ new(Name) ->
   M:new(Name).
 
 save(Model) ->
-  norm_utls:maybe_add_meta(Model),
+  FullModel = norm_utls:maybe_add_meta(Model),
   M = norm_utls:get_module(),
-  M:save(Model).
+  M:save(FullModel).
 
 find(Name,Predicates) ->
   M = norm_utls:get_module(),
   M:find(Name,Predicates).
 
 remove(Model) ->
-  norm_utls:maybe_add_meta(Model),
+  FullModel = norm_utls:maybe_add_meta(Model),
   M = norm_utls:get_module(),
-  M:remove(Model).
+  M:remove(FullModel).
 
 models() ->
   M = norm_utls:get_module(),
@@ -61,18 +61,18 @@ new(DbName,Name) ->
   M:new(Name).
 
 save(DbName,Model) ->
-  norm_utls:maybe_add_meta(Model,DbName),
+  FullModel = norm_utls:maybe_add_meta(Model,DbName),
   M = norm_utls:get_module(DbName),
-  M:save(Model).
+  M:save(FullModel).
 
 find(DbName,Name,Predicates) ->
   M = norm_utls:get_module(DbName),
   M:find(Name,Predicates).
 
 remove(DbName,Model) ->
-  norm_utls:maybe_add_meta(Model,DbName),
+  FullModel = norm_utls:maybe_add_meta(Model,DbName),
   M = norm_utls:get_module(DbName),
-  M:remove(Model).
+  M:remove(FullModel).
 
 models(DbName) ->
   M = norm_utls:get_module(DbName),
