@@ -315,8 +315,8 @@ insert(ModelMap,Ops) ->
   Sql = sql_insert(ModelMap,Ops), 
   case ?SQUERY(Sql) of
     {ok,_Count,_Cols,[{Id}]} -> {ok,norm_utls:bin_to_num(Id)};
-    {error,{error,error,<<"23505">>,Info,Detail}} -> {error,{Info,Detail}};
-    Error -> {error,Error}
+    {error,{error,error,<<"23505">>,Info,Detail}} -> {error,{<<"23505">>,Info,Detail}};
+    Error -> {error,{<<"Unmatched Result">>,Error}}
   end. 
 
 %% @doc Insert should insert id value only when it is specified, otherwise 
