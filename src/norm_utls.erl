@@ -115,7 +115,7 @@ maybe_add_meta(Model,DbName) ->
             if FieldSpec =:= undefined -> {error,Model};
             true ->
               NewMeta = maps:put(<<"fields">>,FieldSpec,Meta),
-              {ok,maps:put(<<"__meta__">>,NewMeta)}
+              {ok,maps:put(<<"__meta__">>,NewMeta,Model)}
             end
         end;
       true -> {ok,Model} end

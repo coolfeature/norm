@@ -53,7 +53,7 @@ new(DbName,Name) ->
   M:new(Name).
 
 save(DbName,Model) ->
-  case norm_utls:maybe_add_meta(Model) of
+  case norm_utls:maybe_add_meta(Model,DbName) of
     {ok,FullModel} ->
       M = norm_utls:get_module(DbName),
       M:save(FullModel);
@@ -66,7 +66,7 @@ find(DbName,Name,Predicates) ->
   M:find(Name,Predicates).
 
 remove(DbName,Model) ->
-  case norm_utls:maybe_add_meta(Model) of
+  case norm_utls:maybe_add_meta(Model,DbName) of
     {ok,FullModel} ->
       M = norm_utls:get_module(DbName),
       M:remove(FullModel);
