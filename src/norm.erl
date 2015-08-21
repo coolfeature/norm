@@ -33,6 +33,7 @@ new(Name) ->
   M:new(Name).
 
 save(Model) ->
+  norm_utls:maybe_add_meta(Model),
   M = norm_utls:get_module(),
   M:save(Model).
 
@@ -41,6 +42,7 @@ find(Name,Predicates) ->
   M:find(Name,Predicates).
 
 remove(Model) ->
+  norm_utls:maybe_add_meta(Model),
   M = norm_utls:get_module(),
   M:remove(Model).
 
@@ -59,6 +61,7 @@ new(DbName,Name) ->
   M:new(Name).
 
 save(DbName,Model) ->
+  norm_utls:maybe_add_meta(Model,DbName),
   M = norm_utls:get_module(DbName),
   M:save(Model).
 
@@ -67,6 +70,7 @@ find(DbName,Name,Predicates) ->
   M:find(Name,Predicates).
 
 remove(DbName,Model) ->
+  norm_utls:maybe_add_meta(Model,DbName),
   M = norm_utls:get_module(DbName),
   M:remove(Model).
 

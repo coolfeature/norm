@@ -97,6 +97,30 @@ model_type(Field,Model) ->
   FieldMeta = maps:get(Field,MetaFields),
   maps:get(<<"type">>,FieldMeta).
 
+maybe_add_meta(Model) ->
+  maybe_add_meta(Model,get_module()).
+maybe_add_meta(Model,DbName) ->
+  Meta = maps:get(<<"__meta__">>,Model,#{}),
+  Name = maps:get(<<"name">>,Meta,undefined),
+  case Name of
+    undefined -> {error,Model};
+    _ -> 
+      Fields = maps:get(<<"fields">>,Meta,undefined),
+      if Fields =:= undefined -> 
+        DbModels = models(DbName),
+        case maps:get(Name,DbModels,undefined) of
+          undefined -> {error,Model};
+          ModelSpec ->
+            FieldSpec = maps:get(<<"fields">>,ModelSpec,undefined), 
+            if FieldSpec =:= undefined -> {error,Model};
+            true ->
+              NewMeta = maps:put(<<"fields">>,FieldSpec,Meta),
+              {ok,maps:put(<<"__meta__">>,NewMeta)}
+            end
+        end;
+      true -> {ok,Model} end
+  end.
+  
 %% ------------
 %% -- UTILITIES 
 %% ------------
