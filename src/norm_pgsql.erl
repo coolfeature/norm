@@ -50,7 +50,8 @@ init() ->
     ,{ok,commit} = commit()
   catch Error:Reason ->
     Rollback = rollback(),
-    ?LOG(info,[Error,Reason,Rollback])
+    ?LOG(info,[Error,Reason,Rollback]),
+    Rollback
   end.
 
 new(Name) ->
@@ -64,7 +65,8 @@ new(Name) ->
   maps:put('__meta__',ModelSpecName,NullMap) end.
 
 save(Model) -> 
-  Id = maps:get('id',Model,undefined),
+  %% @todo id is hardcoded
+  Id = maps:get(<<"id">>,Model,undefined),
   Name = norm_utls:model_name(Model),
   case no_value(Id) of 
     false ->
@@ -83,7 +85,7 @@ find(Name,Id) ->
   
 remove(Model) ->
   Name = norm_utls:model_name(Model),
-  Id = maps:get(id,Model),
+  Id = maps:get(<<"id">>,Model),
   delete(Name,Id).
 
 models() -> 
@@ -216,7 +218,7 @@ field_to_sql(Name,FldSpec) ->
     false -> <<" NOT NULL ">>;
     true -> <<" NULL ">>
   end,
-  norm_utls:concat_bin([norm_utls:atom_to_bin(Name),<<" ">>,TypeLine,Null]).
+  norm_utls:concat_bin([Name,<<" ">>,TypeLine,Null]).
 
 %% @doc
 
@@ -232,10 +234,9 @@ constraint_to_sql(TableSpec) ->
 
 constraint_to_sql('pk',ConstraintSpec) ->
   Name = maps:get('name',ConstraintSpec,undefined),
-  ConName = if Name =:= undefined -> constraint_name(['pk']); 
-    true -> norm_utls:atom_to_bin(Name) end,
+  ConName = if Name =:= undefined -> constraint_name(['pk']); true -> Name end,
   Fields = lists:foldl(fun(Field,AccF) ->
-    norm_utls:concat_bin([ <<",">>,norm_utls:atom_to_bin(Field),AccF])
+    norm_utls:concat_bin([ <<",">>,Field,AccF])
   end,<<"">>,maps:get('fields',ConstraintSpec,[])),
   FieldsS = strip_comma(Fields),
   norm_utls:concat_bin([ <<",">>,<<"CONSTRAINT ">>,ConName,<<" PRIMARY KEY (">>
@@ -244,7 +245,7 @@ constraint_to_sql('pk',ConstraintSpec) ->
 constraint_to_sql('fk',ConstraintSpecList) ->
   lists:foldl(fun(ConstraintSpec,Acc) ->
     Fields = lists:foldl(fun(Field,AccF) ->
-        norm_utls:concat_bin([ AccF,norm_utls:atom_to_bin(Field),<<",">>])
+        norm_utls:concat_bin([ AccF,Field,<<",">>])
       end,<<"">>,maps:get('fields',ConstraintSpec,[])),
     FieldsS = strip_comma(Fields),
     References = maps:get('references',ConstraintSpec,[]),
@@ -292,7 +293,7 @@ sql_table_exists(Table) ->
   norm_utls:concat_bin([ <<"select exists ( select 1 from "
     "information_schema.tables where table_schema = '">>,
     norm_utls:atom_to_bin(get_schema()),<<"' and table_name = '">>,
-    norm_utls:atom_to_bin(Table),<<"');">> ]).
+    Table,<<"');">> ]).
 
 ensure_tables_exist() ->
   lists:foldl(fun(Table,Acc) ->
@@ -306,7 +307,8 @@ ensure_tables_exist() ->
 %% ------------------------------- INSERT -------------------------------------
 
 insert(ModelMap) ->
-  Id = maps:get('id',ModelMap,undefined),
+  %% @todo id is hardcoded
+  Id = maps:get(<<"id">>,ModelMap,undefined),
   if Id =:= undefined -> insert(ModelMap,#{});
   true -> insert(ModelMap,#{ returning => id }) end.
 
@@ -334,7 +336,7 @@ sql_insert(ModelMap,Ops) ->
       '__meta__' -> {Fs,Vs};
       _ ->
         MapVal = maps:get(Key,ModelMap,undefined),
-        Fs2 = norm_utls:concat_bin([ Fs,norm_utls:atom_to_bin(Key),<<",">>]),
+        Fs2 = norm_utls:concat_bin([ Fs,Key,<<",">>]),
         MetaFields = maps:get('fields',ModelSpec),
         MetaVal = maps:get(Key,MetaFields),
         MetaValType = maps:get('type',MetaVal),
@@ -380,11 +382,11 @@ select(Model) when is_map(Model) ->
   end,[],norm_utls:model_keys(Model)),
   select(Name,#{ where => Where }).
 
-select(Name,Id) when is_atom(Name), is_integer(Id) ->
+select(Name,Id) when is_binary(Name), is_integer(Id) ->
   select(Name,
-    #{ where => [{'id','=',Id}],order => any,limit => 50,offset => 0});
+    #{ where => [{<<"id">>,'=',Id}],order => any,limit => 50,offset => 0});
 
-select(Name,Predicates) when is_atom(Name), is_map(Predicates) ->
+select(Name,Predicates) when is_binary(Name), is_map(Predicates) ->
   Sql = select_sql(Name,Predicates),
   case ?SQUERY(Sql) of
     {ok,Cols,Vals} ->
@@ -410,10 +412,9 @@ select_to_model(Name,Cols,Vals) ->
     Results = tuple_to_list(ResultTuple),
     PropList = lists:zip(Fields,Results),
     Model = lists:foldl(fun({FieldBin,ValueBin},ModelMap) ->
-      Field = norm_utls:bin_to_atom(FieldBin),
-      FieldType = norm_utls:model_type(Field,ModelMap),
+      FieldType = norm_utls:model_type(FieldBin,ModelMap),
       Value = sql_to_type(FieldType,ValueBin),
-      maps:update(Field,Value,ModelMap)
+      maps:update(FieldBin,Value,ModelMap)
     end,Map,PropList),
     Acc ++ [Model]
   end,[],Vals).
@@ -426,7 +427,7 @@ where(Name,Where) ->
   WhereSql = lists:foldl(fun(Tuple,Acc) -> 
     norm_utls:concat_bin([Acc,
       case Tuple of
-        {Field,Op,Val} when is_atom(Field)->
+        {Field,Op,Val} when is_binary(Field)->
           Model = new(Name),
           FieldType = norm_utls:model_type(Field,Model),
           norm_utls:concat_bin([ 
@@ -471,7 +472,7 @@ offset(Offset) ->
 %% ----------------------------- DELETE ---------------------------------------
 
 delete(Name,Id) when is_integer(Id) ->
-  delete(Name,#{ where => [{'id','=',Id}]});
+  delete(Name,#{ where => [{<<"id">>,'=',Id}]});
 delete(Name,Conditions) when is_map(Conditions) ->
   case ?SQUERY(delete_sql(Name,Conditions)) of
     {ok,Count} -> {ok,Count};
@@ -479,7 +480,7 @@ delete(Name,Conditions) when is_map(Conditions) ->
   end.
 
 delete_sql(Name,Id) when is_integer(Id) ->
-  delete_sql(Name,[{'id','=',Id}]);
+  delete_sql(Name,[{<<"id">>,'=',Id}]);
 
 delete_sql(Name,Conditions) when is_map(Conditions) ->
   Where = maps:get(where,Conditions,undefined),
@@ -500,7 +501,7 @@ update(Model) ->
 sql_update(Model) ->
   Updates = lists:foldl(fun(Key,Acc) ->
     case Key of
-      'id' -> <<"">>;
+      <<"id">> -> <<"">>;
       Field -> 
         Value = maps:get(Key,Model),
         Type = norm_utls:model_type(Field,Model),
@@ -510,8 +511,9 @@ sql_update(Model) ->
     end 
   end,<<"">>,norm_utls:model_keys(Model)),
   Table = norm_utls:model_name(Model),
-  Id = maps:get('id',Model),
-  IdType = norm_utls:model_type(id,Model),
+  %% @todo hardcoded id
+  Id = maps:get(<<"id">>,Model),
+  IdType = norm_utls:model_type(<<"id">>,Model),
   norm_utls:concat_bin([<<"UPDATE ">>,table_name(Table),<<" SET ">>,
     strip_comma(Updates),<<" WHERE id = ">>,type_to_sql(IdType,Id)]).
 
@@ -657,9 +659,9 @@ get_schema() ->
 
 constraint_name(NameTokens) when is_list(NameTokens) ->
   NamePart = lists:foldl(fun(E,Acc) -> 
-    Name = case is_atom(E) of 
-      true -> norm_utls:atom_to_bin(E);
-      false -> E
+    Name = case is_binary(E) of 
+      true -> E;
+      false -> norm_utls:atom_to_bin(E)
     end,
     norm_utls:concat_bin([ Acc,Name,<<"_">> ])
   end,<<"">>,NameTokens),
@@ -680,14 +682,13 @@ create_rank(Map) ->
 
 fields_sql(Map) ->
   RefFields = lists:foldl(fun(Field,AccRF) ->
-    norm_utls:concat_bin([ AccRF,norm_utls:atom_to_bin(Field),<<",">>]) 
+    norm_utls:concat_bin([ AccRF,Field,<<",">>]) 
   end,<<"">>,maps:get('fields',Map)),
   strip_comma(RefFields).
 
-table_name(TableName) when is_atom(TableName) ->
-  Name = norm_utls:atom_to_bin(TableName),
+table_name(TableName) when is_binary(TableName) ->
   Schema = norm_utls:atom_to_bin(get_schema()),
-  norm_utls:concat_bin([ Schema, <<".">>, Name ]).
+  norm_utls:concat_bin([ Schema, <<".">>, TableName ]).
 
 get_pool() ->
   Pools = norm_utls:get_db_config(pgsql,pools),

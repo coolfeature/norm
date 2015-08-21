@@ -21,24 +21,24 @@ init_mnesia_test() ->
 %% @private Save tests 
 
 save_pgsql_new_test() ->  
-  User = norm:new('pgsql','user'),
-  User1 = maps:update('id',1,User),
-  User2 = maps:update('email',<<"szymon.czaja@kfis.co.uk">>,User1),
-  User3 = maps:update('password',<<"Password">>,User2),
+  User = norm:new('pgsql',<<"user">>),
+  User1 = maps:update(<<"id">>,1,User),
+  User2 = maps:update(<<"email">>,<<"szymon.czaja@kfis.co.uk">>,User1),
+  User3 = maps:update(<<"password">>,<<"Password">>,User2),
   ?assertMatch({ok,_},norm:save('pgsql',User3)).
 
 save_pgsql_existing_test() ->  
-  User = norm:new('pgsql','user'),
-  User1 = maps:update('id',1,User),
-  User2 = maps:update('email',<<"szymon.czaja@kfis.co.uk">>,User1),
-  User3 = maps:update('password',<<"Password">>,User2),
+  User = norm:new('pgsql',<<"user">>),
+  User1 = maps:update(<<"id">>,1,User),
+  User2 = maps:update(<<"email">>,<<"szymon.czaja@kfis.co.uk">>,User1),
+  User3 = maps:update(<<"password">>,<<"Password">>,User2),
   ?assertMatch({ok,_},norm:save('pgsql',User3)).
 
 %% @private Delete tests 
 
 remove_pgsql_test() ->
-  User = norm:new('pgsql','user'),
-  User1 = maps:update('id',1,User),
+  User = norm:new('pgsql',<<"user">>),
+  User1 = maps:update(<<"id">>,1,User),
   ?assertMatch({ok,1},norm:remove('pgsql',User1)).
 
 

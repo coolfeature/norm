@@ -17,41 +17,41 @@ init_test() ->
 %% @private Insert test 
 
 insert_new_test() ->  
-  User = norm_pgsql:new('user'),
-  User1 = maps:update('id',1,User),
-  User2 = maps:update('email',<<"szymon.czaja@kfis.co.uk">>,User1),
-  User3 = maps:update('password',<<"Password">>,User2),
+  User = norm_pgsql:new(<<"user">>),
+  User1 = maps:update(<<"id">>,1,User),
+  User2 = maps:update(<<"email">>,<<"szymon.czaja@kfis.co.uk">>,User1),
+  User3 = maps:update(<<"password">>,<<"Password">>,User2),
   ?assertMatch({ok,_},norm_pgsql:insert(User3)).
 
 insert_existing_test() ->  
-  User = norm_pgsql:new('user'),
-  User1 = maps:update('id',1,User),
-  User2 = maps:update('email',<<"szymon.czaja@kfis.co.uk">>,User1),
-  User3 = maps:update('password',<<"Password">>,User2),
+  User = norm_pgsql:new(<<"user">>),
+  User1 = maps:update(<<"id">>,1,User),
+  User2 = maps:update(<<"email">>,<<"szymon.czaja@kfis.co.uk">>,User1),
+  User3 = maps:update(<<"password">>,<<"Password">>,User2),
   ?assertMatch({error,_},norm_pgsql:insert(User3)).
 
 %% @private Select test
 
 select_by_id_test() ->
-  ?assertMatch([_User],norm_pgsql:select(user,1)).
+  ?assertMatch([_User],norm_pgsql:select(<<"user">>,1)).
 
 select_by_where_test() ->
-  ?assertMatch([_User],norm_pgsql:select(user,#{ where => [{'password','LIKE',"%ass%"}]})).
+  ?assertMatch([_User],norm_pgsql:select(<<"user">>,#{ where => [{<<"password">>,'LIKE',"%ass%"}]})).
 
 %% @private Update test
 
 update_test() ->
-  User = norm_pgsql:new('user'),
-  User1 = maps:update('id',1,User),
-  User2 = maps:update('password',<<"NewPassword">>,User1),
+  User = norm_pgsql:new(<<"user">>),
+  User1 = maps:update(<<"id">>,1,User),
+  User2 = maps:update(<<"password">>,<<"NewPassword">>,User1),
   {ok,_Id} = norm_pgsql:update(User2),
-  [Model] = norm_pgsql:select(user,1),
-  ?assertMatch(<<"NewPassword">>,maps:get(password,Model)).
+  [Model] = norm_pgsql:select(<<"user">>,1),
+  ?assertMatch(<<"NewPassword">>,maps:get(<<"password">>,Model)).
 
 %% @private Delete test 
 
 delete_test() ->
-  ?assertMatch({ok,1},norm_pgsql:delete(user,1)).
+  ?assertMatch({ok,1},norm_pgsql:delete(<<"user">>,1)).
 
 %% @private Drop tables
 

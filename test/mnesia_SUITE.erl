@@ -17,11 +17,11 @@ init_test() ->
 %% @private Insert test 
 
 write_new_test() ->  
-  Visit = norm_mnesia:new('views'),
-  Visit1 = maps:update('id',1,Visit),
-  Visit2 = maps:update('visits',23,Visit1),
-  Visit3 = maps:update('reviews',[#{}],Visit2),
-  Visit4 = maps:update('purchases',[#{}],Visit3),
+  Visit = norm_mnesia:new(<<"views">>),
+  Visit1 = maps:update(<<"id">>,1,Visit),
+  Visit2 = maps:update(<<"visits">>,23,Visit1),
+  Visit3 = maps:update(<<"reviews">>,[#{}],Visit2),
+  Visit4 = maps:update(<<"purchases">>,[#{}],Visit3),
   ?assertMatch({ok,_},norm_mnesia:write(Visit4)).
 
 %% @private Select test

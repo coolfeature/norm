@@ -86,10 +86,13 @@ create_tables(Nodes) ->
 
   %% Create tables
   Models = ?MODELS,
-  Tables = lists:foldl(fun(Table,Acc) ->
-    TableSpec = maps:get(Table,Models),
+  Tables = lists:foldl(fun(TableNameBin,Acc) ->
+    TableSpec = maps:get(TableNameBin,Models),
     Type = maps:get('type',TableSpec,'set'),
-    Acc ++ [{Table,[{attributes,fields(Table)},{Copies,Nodes},{type,Type}]}]
+    TableName = norm_utls:bin_to_atom(TableNameBin),
+    Fields = fields(TableNameBin),
+    Acc ++ [{TableName,[{attributes,Fields}
+      ,{Copies,Nodes},{type,Type}]}]
   end,[],maps:keys(Models)),
   create_mnesia_table(Tables,[]).
 
@@ -110,13 +113,13 @@ create_mnesia_table([{Name,Atts}|Specs],Created) ->
   end,
   create_mnesia_table(Specs,Result);
 create_mnesia_table([],Created) ->
-  mnesia:wait_for_tables(maps:keys(?MODELS),5000),
+  mnesia:wait_for_tables(model_names(),5000),
   {ok_error(Created),Created}.
 
 %% ------------------------------- WRITE --------------------------------------
 
 write(Map) when is_map(Map) ->
-  Table = norm_utls:model_name(Map),
+  Table = norm_utls:bin_to_atom(norm_utls:model_name(Map)),
   RecordTuple = model_to_tuple(Map),  
   Fun = fun() -> mnesia:write(Table,RecordTuple,write) end,
   case mnesia:transaction(Fun) of
@@ -125,7 +128,8 @@ write(Map) when is_map(Map) ->
   end;
 write(Maps) when is_list(Maps) ->
   Fun = fun() -> 
-    [mnesia:write(norm_utls:model_name(Map),model_to_tuple(Map),write) || 
+    [mnesia:write(norm_utls:bin_to_atom(norm_utls:model_name(Map))
+      ,model_to_tuple(Map),write) || 
       Map <- Maps] 
   end,
   case mnesia:transaction(Fun) of
@@ -214,10 +218,11 @@ delete(Name,Id) ->
 %% ----------------------------------------------------------------------------
 
 model_to_tuple(Map) ->
-  Name = norm_utls:model_name(Map),
+  Name = norm_utls:bin_to_atom(norm_utls:model_name(Map)),
   Attributes = mnesia:table_info(Name,attributes),
   Fields = lists:foldl(fun(Key,Acc) ->
-    Acc ++ [maps:get(Key,Map)]
+    KeyBin = norm_utls:atom_to_bin(Key),
+    Acc ++ [maps:get(KeyBin,Map)]
   end,[Name],Attributes),
   list_to_tuple(Fields).
 
@@ -231,9 +236,10 @@ tuple_to_model(RecordTuple) ->
   [Name|Fields] = tuple_to_list(RecordTuple),
   Attributes = mnesia:table_info(Name,attributes),
   Results = lists:zip(Attributes,Fields),
-  Model = new(Name),
+  Model = new(norm_utls:atom_to_bin(Name)),
   lists:foldl(fun({Field,Value},Map) ->
-    maps:update(Field,Value,Map)
+    FieldBin = norm_utls:atom_to_bin(Field),
+    maps:update(FieldBin,Value,Map)
   end,Model,Results).
 
 %% ----------------------------------------------------------------------------
@@ -243,15 +249,18 @@ tuple_to_model(RecordTuple) ->
 fields(Name) ->
   Map = maps:get(Name,?MODELS),
   Fields = maps:get('fields',Map),
-  Keys = maps:keys(Fields),
+  FieldsBin = maps:keys(Fields),
+  Keys = lists:foldl(fun(FBin,Acc) -> 
+    Acc ++ [norm_utls:bin_to_atom(FBin)] end,[],FieldsBin),
   Key = maps:get('key',Map,undefined),
   if Key =:= undefined -> Keys; 
   true -> 
     [H|_T] = Keys,
-    if H =:= Key -> Keys; 
+    KeyAtom = norm_utls:bin_to_atom(Key),
+    if H =:= KeyAtom -> Keys; 
     true -> 
-      RemList = lists:delete(Key,Keys),
-      [Key] ++ RemList
+      RemList = lists:delete(KeyAtom,Keys),
+      [KeyAtom] ++ RemList
     end 
   end.
 
@@ -262,4 +271,7 @@ ok_error([]) ->
 ok_error([{error,_}|_Results]) ->
   error.
 
+model_names() ->
+  lists:foldl(fun(Bin,Acc) -> Acc ++ [norm_utls:bin_to_atom(Bin)] end,[],
+    maps:keys(?MODELS)).
 
