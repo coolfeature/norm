@@ -25,30 +25,22 @@
 %% ----------------------------------------------------------------------------
 
 init() ->
-  M = norm_utls:get_module(),
-  init(M).
+  init(norm_utls:get_config(default_db)).
 
 new(Name) ->
-  M = norm_utls:get_module(),
-  M:new(Name).
+  new(norm_utls:get_config(default_db),Name).
 
 save(Model) ->
-  FullModel = norm_utls:maybe_add_meta(Model),
-  M = norm_utls:get_module(),
-  M:save(FullModel).
+  save(norm_utls:get_config(default_db),Model).
 
 find(Name,Predicates) ->
-  M = norm_utls:get_module(),
-  M:find(Name,Predicates).
+  find(norm_utls:get_config(default_db),Name,Predicates).
 
 remove(Model) ->
-  FullModel = norm_utls:maybe_add_meta(Model),
-  M = norm_utls:get_module(),
-  M:remove(FullModel).
+  remove(norm_utls:get_config(default_db),Model).
 
 models() ->
-  M = norm_utls:get_module(),
-  M:models().
+  models(norm_utls:get_config(default_db)).
 
 %% ----------------------------------------------------------------------------
 
@@ -61,18 +53,26 @@ new(DbName,Name) ->
   M:new(Name).
 
 save(DbName,Model) ->
-  FullModel = norm_utls:maybe_add_meta(Model,DbName),
-  M = norm_utls:get_module(DbName),
-  M:save(FullModel).
+  case norm_utls:maybe_add_meta(Model) of
+    {ok,FullModel} ->
+      M = norm_utls:get_module(DbName),
+      M:save(FullModel);
+    {error,Model} -> 
+      {error,<<"Missing __meta__ data.">>}
+  end.
 
 find(DbName,Name,Predicates) ->
   M = norm_utls:get_module(DbName),
   M:find(Name,Predicates).
 
 remove(DbName,Model) ->
-  FullModel = norm_utls:maybe_add_meta(Model,DbName),
-  M = norm_utls:get_module(DbName),
-  M:remove(FullModel).
+  case norm_utls:maybe_add_meta(Model) of
+    {ok,FullModel} ->
+      M = norm_utls:get_module(DbName),
+      M:remove(FullModel);
+    {error,Model} ->
+      {error,<<"Missing __meta__ data.">>}
+  end.
 
 models(DbName) ->
   M = norm_utls:get_module(DbName),
