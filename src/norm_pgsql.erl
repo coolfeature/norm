@@ -64,12 +64,16 @@ new(Name) ->
   maps:put('__meta__',ModelSpecName,NullMap) end.
 
 save(Model) -> 
-  Id = maps:get('id',Model),
+  Id = maps:get('id',Model,undefined),
   Name = norm_utls:model_name(Model),
-  Exists = select(Name,Id),
-  case Exists of
-    [_H|_T] -> update(Model);
-    [] -> insert(Model)
+  case no_value(Id) of 
+    false ->
+      case select(Name,Id) of
+        [_H|_T] -> update(Model);
+        [] -> insert(Model)
+      end;
+    true ->
+      insert(Model)
   end.
 
 find(Name,Predicates) when is_map(Predicates) ->
@@ -334,13 +338,26 @@ sql_insert(ModelMap,Ops) ->
         MetaFields = maps:get('fields',ModelSpec),
         MetaVal = maps:get(Key,MetaFields),
         MetaValType = maps:get('type',MetaVal),
+        %%
+       %%
         Vs2 = norm_utls:concat_bin([Vs
           ,type_to_sql(MetaValType,MapVal),<<",">>]),
         case lists:member(Key,Pk) of
-          true ->
+          true ->        
             case no_value(MapVal) of
               true -> {Fs,Vs};
-              false -> {Fs2,Vs2} 
+              false -> 
+                %% @todo add id value vs sequence value check 
+                %% SELECT MAX(the_primary_key) FROM the_table;
+                %%                   v              
+                %% SELECT nextval('the_primary_key_sequence');
+                %%
+                case lists:member(MetaValType,[serial,bigserial]) of 
+                  true -> norm_log:log_term(warning,"Ensure PK matches value r"
+                    "eturned by nextval('seq_name').");
+                  false -> []
+                end,
+               {Fs2,Vs2} 
             end;
           false ->
             {Fs2,Vs2}
@@ -552,6 +569,8 @@ sql_rollback() ->
 
 %% ----------------------------------------------------------------------------
 
+option_to_sql({returning,undefined}) ->
+  <<"">>;
 option_to_sql({returning,What}) ->
   norm_utls:concat_bin([<<" RETURNING ">>,norm_utls:atom_to_bin(What),<<" ">>]);
 option_to_sql({cascade,true}) -> 

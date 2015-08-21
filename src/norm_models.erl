@@ -27,7 +27,7 @@ pgsql() ->
         ,customer_id => #{  type => 'bigint', null => 'false' }
       }
       ,constraints => #{
-        pk => #{ 'name' => 'pk_customer', fields => ['id'] }
+        pk => #{ name => 'pk_customer', fields => ['id'] }
         ,fk => [ #{ references => #{ table => 'user', fields => [id] }, fields => ['customer_id'] }]
       }
     }
