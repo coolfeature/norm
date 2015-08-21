@@ -325,7 +325,7 @@ insert(ModelMap,Ops) ->
 %% update it.
  
 sql_insert(ModelMap,Ops) -> 
-  ModelSpec = maps:get('__meta__',ModelMap,#{}),
+  ModelSpec = maps:get(<<"__meta__">>,ModelMap,#{}),
   ModelName = maps:get('name',ModelSpec),
   ModelFullSpec = maps:get(ModelName,?MODELS),
   ModelConstraints = maps:get('constraints',ModelFullSpec),
@@ -333,7 +333,7 @@ sql_insert(ModelMap,Ops) ->
     undefined -> undefined; Map -> maps:get('fields',Map,undefined) end,
   {Fields,Values} = lists:foldl(fun(Key,{Fs,Vs}) -> 
     case Key of
-      '__meta__' -> {Fs,Vs};
+      <<"__meta__">> -> {Fs,Vs};
       _ ->
         MapVal = maps:get(Key,ModelMap,undefined),
         Fs2 = norm_utls:concat_bin([ Fs,Key,<<",">>]),
