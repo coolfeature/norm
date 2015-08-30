@@ -28,7 +28,10 @@ pgsql() ->
       }
       ,<<"constraints">> => #{
         <<"pk">> => #{ <<"name">> => <<"pk_customer">>, <<"fields">> => [<<"id">>] }
-        ,<<"fk">> => [ #{ <<"references">> => #{ <<"table">> => <<"user">>, <<"fields">> => [<<"id">>] }, <<"fields">> => [<<"customer_id">>] }]
+        ,<<"fk">> => [ #{ 
+            <<"references">> => #{ <<"table">> => <<"user">>, <<"fields">> => [<<"id">>] }
+            , <<"fields">> => [<<"customer_id">>] 
+          }]
       }
     }
   }.
