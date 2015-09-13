@@ -131,7 +131,13 @@ create_schema(Schema) ->
   {ok,true} -> {ok,{Schema,exists}} end.
     
 sql_create_schema(Schema) ->
-  sql_create_schema(Schema,#{ <<"ifexists">> => <<"false">> }).
+  Op = case server_version() of
+    {ok,Version} -> 
+      if Version < 9.3 -> #{}; 
+      true -> #{ <<"ifexists">> => <<"false">> } end; 
+    _Error -> #{}
+  end,
+  sql_create_schema(Schema,Op).
 sql_create_schema(Schema,Op) ->
   norm_utls:concat_bin([ <<"CREATE SCHEMA ">>,options_to_sql(<<"ifexists">>,Op)
   ,<<" ">>,Schema,<<";">> ]).
@@ -650,6 +656,15 @@ sql_to_type(_Type,Value) ->
 %% ----------------------------------------------------------------------------
 %% ----------------------------- UTILITIES ------------------------------------
 %% ----------------------------------------------------------------------------
+
+server_version() ->
+  case ?SQUERY(sql_server_version()) of
+    {ok,_Col,[{Version}]} -> {ok,norm_utls:bin_to_num(Version)};
+    Error -> {error,Error}
+  end.
+
+sql_server_version() ->
+  <<"show server_version">>.
 
 get_schema() ->
   case norm_utls:get_db_config(pgsql,tablespace) of
