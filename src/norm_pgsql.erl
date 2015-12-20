@@ -450,8 +450,8 @@ where(_,undefined) ->
   <<"">>;
 where(Name,Wheres) ->
   Last = lists:last(Wheres),
-  NoLastAnd = if Last =:= 'and' -> droplast(Wheres); true -> Wheres end,
-  Where = if Last =:= 'or' -> droplast(NoLastAnd); true -> NoLastAnd end,
+  NoLastAnd = if Last =:= 'and' -> lists:droplast(Wheres); true -> Wheres end,
+  Where = if Last =:= 'or' -> lists:droplast(NoLastAnd); true -> NoLastAnd end,
   WhereSql = lists:foldl(fun(Tuple,Acc) -> 
     norm_utls:concat_bin([Acc,
       case Tuple of
