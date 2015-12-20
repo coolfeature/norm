@@ -213,6 +213,7 @@ date_to_erlang(Date,'iso8601') ->
 %% @todo Get rid of strings - consider using dh_date
 
 time_to_erlang(Time,'iso8601') ->
+  [HMS,_SS] = re:split(Time,"\\.",[{return,list}]),
   [H,M,S] = re:split(Time,":",[{return,list}]),
   {list_to_integer(H),list_to_integer(M),list_to_integer(S)}.
 
