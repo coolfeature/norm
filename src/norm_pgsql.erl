@@ -403,7 +403,7 @@ select(Model) when is_map(Model) ->
   Name = norm_utls:model_name(Model),
   Where = lists:foldl(fun(Key,Acc) ->
     Val = maps:get(Key,Model),
-    Acc ++ [{Key,'=',Val}]
+    Acc ++ [{Key,'=',Val},and]
   end,[],norm_utls:model_keys(Model)),
   select(Name,#{ where => Where }).
 
@@ -448,7 +448,10 @@ select_to_model(Name,Cols,Vals) ->
 
 where(_,undefined) ->
   <<"">>;
-where(Name,Where) ->
+where(Name,Wheres) ->
+  Last = lists:last(Wheres),
+  NoLastAnd = if Last =:= and -> droplast(Wheres); true -> Wheres end,
+  Where = if Last =:= or -> droplast(NoLastAnd); true -> NoLastAnd end,
   WhereSql = lists:foldl(fun(Tuple,Acc) -> 
     norm_utls:concat_bin([Acc,
       case Tuple of
