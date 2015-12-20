@@ -400,7 +400,7 @@ sql_insert(ModelMap,Ops) ->
 %% ------------------------------- SELECT -------------------------------------
 
 select(Model) when is_map(Model) ->
-  Name = norm_ults:model_name(Model),
+  Name = norm_utls:model_name(Model),
   Where = lists:foldl(fun(Key,Acc) ->
     Val = maps:get(Key,Model),
     Acc ++ [{Key,'=',Val}]
