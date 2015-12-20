@@ -223,7 +223,11 @@ field_to_sql(Name,FldSpec) ->
     <<"false">> -> <<" NOT NULL ">>;
     <<"true">> -> <<" NULL ">>
   end,
-  norm_utls:concat_bin([Name,<<" ">>,TypeLine,Null]).
+  Default = case maps:get(<<"default">>,FldSpec,undefined) of
+    undefined -> <<"">>;
+    Dflt -> norm_utls:concat_bin([<<" DEFAULT ">>,Dflt])
+  end,
+  norm_utls:concat_bin([Name,<<" ">>,TypeLine,Null,Default]).
 
 %% @doc
 
