@@ -267,7 +267,7 @@ constraint_to_sql(<<"fk">>,ConstraintSpecList) ->
     norm_utls:concat_bin([ <<",">>,<<"CONSTRAINT ">>,ConName,
       <<" FOREIGN KEY (">>,FieldsS,<<") REFERENCES ">>,RefTableName,<<" (">>,
       RefFieldsS,<<") ">>,Options,Acc ])
-  end,<<"">>,ConstraintSpecList).
+  end,<<"">>,ConstraintSpecList);
 
 %% @doc There may be multiple UNIQUEs defined.
 
