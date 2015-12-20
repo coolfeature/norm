@@ -247,12 +247,15 @@ constraint_to_sql(<<"pk">>,ConstraintSpec) ->
   norm_utls:concat_bin([ <<",">>,<<"CONSTRAINT ">>,ConName,<<" PRIMARY KEY (">>
     ,FieldsS,<<")">> ]);
 
+%% @doc There may be multiple FKs defined.
+
 constraint_to_sql(<<"fk">>,ConstraintSpecList) ->
   lists:foldl(fun(ConstraintSpec,Acc) ->
-    Fields = lists:foldl(fun(Field,AccF) ->
-        norm_utls:concat_bin([ AccF,Field,<<",">>])
-      end,<<"">>,maps:get(<<"fields">>,ConstraintSpec,[])),
-    FieldsS = strip_comma(Fields),
+    FieldsS = fields_sql(ConstraintSpec),
+    %Fields = lists:foldl(fun(Field,AccF) ->
+    %    norm_utls:concat_bin([ AccF,Field,<<",">>])
+    %  end,<<"">>,maps:get(<<"fields">>,ConstraintSpec,[])),
+    %FieldsS = strip_comma(Fields),
     References = maps:get(<<"references">>,ConstraintSpec,[]),
     RefFieldsS = fields_sql(References),
     RefTable = maps:get(<<"table">>,References),
@@ -264,6 +267,22 @@ constraint_to_sql(<<"fk">>,ConstraintSpecList) ->
     norm_utls:concat_bin([ <<",">>,<<"CONSTRAINT ">>,ConName,
       <<" FOREIGN KEY (">>,FieldsS,<<") REFERENCES ">>,RefTableName,<<" (">>,
       RefFieldsS,<<") ">>,Options,Acc ])
+  end,<<"">>,ConstraintSpecList).
+
+%% @doc There may be multiple UNIQUEs defined.
+
+constraint_to_sql(<<"unique">>,ConstraintSpecList) ->
+  lists:foldl(fun(ConstraintSpec,Acc) ->
+    %Fields = lists:foldl(fun(Field,AccF) ->
+    %    norm_utls:concat_bin([ AccF,Field,<<",">>])
+    %  end,<<"">>,maps:get(<<"fields">>,ConstraintSpec,[])),
+    %FieldsS = strip_comma(Fields),
+    FieldsS = fields_sql(ConstraintSpec),
+    Name = maps:get(<<"name">>,ConstraintSpec,undefined),
+    ConName = if Name =:= undefined -> constraint_name([<<"unique">>]); 
+      true -> norm_utls:atom_to_bin(Name) end,
+    norm_utls:concat_bin([ <<",">>,<<"CONSTRAINT ">>,ConName,
+      <<" UNIQUE (">>,FieldsS,<<") ">>,Acc ])
   end,<<"">>,ConstraintSpecList).
 
 drop_tables() ->
