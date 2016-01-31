@@ -207,12 +207,16 @@ field_to_sql(Name,FldSpec) ->
     <<"varchar">> ->
       Length = maps:get(<<"length">>,FldSpec,<<"50">>),
       norm_utls:concat_bin([<<" VARCHAR(">>,Length,<<")">>]);
+    <<"serial">> ->
+      <<" SERIAL ">>;
     <<"bigserial">> ->
       <<" BIGSERIAL ">>;
     <<"date">> ->
       <<" DATE ">>;
     <<"timestamp">> -> 
       <<" TIMESTAMP ">>;
+    <<"integer">> -> 
+      <<" INTEGER ">>;
     <<"bigint">> -> 
       <<" BIGINT ">>;
     undefined -> 
@@ -628,6 +632,8 @@ type_to_sql(_Type,'undefined') ->
   <<"NULL">>;
 type_to_sql(_Type,'null') ->
   <<"NULL">>;
+type_to_sql(<<"serial">>,Value) ->
+  norm_utls:val_to_bin(Value);
 type_to_sql(<<"bigserial">>,Value) ->
   norm_utls:val_to_bin(Value);
 type_to_sql(<<"bigint">>,Value) ->
@@ -658,6 +664,8 @@ sql_to_type(_Type,'undefined') ->
   <<"NULL">>;
 sql_to_type(_Type,'null') ->
   <<"NULL">>;
+sql_to_type(<<"serial">>,Value) ->
+  norm_utls:bin_to_num(Value);
 sql_to_type(<<"bigserial">>,Value) ->
   norm_utls:bin_to_num(Value);
 sql_to_type(<<"bigint">>,Value) ->
