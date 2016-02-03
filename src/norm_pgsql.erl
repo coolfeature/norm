@@ -345,7 +345,7 @@ insert(ModelMap) ->
   true -> insert(ModelMap,#{ <<"returning">> => <<"id">> }) end.
 
 insert(ModelMap,Ops) ->
-  Sql = sql_insert(ModelMap,Ops), 
+  Sql = sql_insert(ModelMap,Ops),
   case ?SQUERY(Sql) of
     {ok,_Count,_Cols,[{Id}]} -> {ok,norm_utls:bin_to_num(Id)};
     {ok,Id} -> {ok,Id};
@@ -363,7 +363,7 @@ sql_insert(ModelMap,Ops) ->
   ModelFullSpec = maps:get(ModelName,?MODELS),
   ModelConstraints = maps:get(<<"constraints">>,ModelFullSpec),
   Pk = case maps:get(<<"pk">>,ModelConstraints,undefined) of
-    undefined -> undefined; Map -> maps:get(<<"fields">>,Map,undefined) end,
+    undefined -> []; Map -> maps:get(<<"fields">>,Map,[]) end,
   {Fields,Values} = lists:foldl(fun(Key,{Fs,Vs}) -> 
     case Key of
       <<"__meta__">> -> {Fs,Vs};
