@@ -363,7 +363,9 @@ sql_insert(ModelMap,Ops) ->
   ModelFullSpec = maps:get(ModelName,?MODELS),
   ModelConstraints = maps:get(<<"constraints">>,ModelFullSpec),
   Pk = case maps:get(<<"pk">>,ModelConstraints,undefined) of
-    undefined -> []; Map -> maps:get(<<"fields">>,Map,[]) end,
+    undefined -> []; 
+    Map -> maps:get(<<"fields">>,Map,[]) 
+  end,
   {Fields,Values} = lists:foldl(fun(Key,{Fs,Vs}) -> 
     case Key of
       <<"__meta__">> -> {Fs,Vs};
@@ -374,7 +376,10 @@ sql_insert(ModelMap,Ops) ->
         MetaVal = maps:get(Key,MetaFields),
         MetaValType = maps:get(<<"type">>,MetaVal),
         %%
-       %%
+        %% TODO: check if field has a default, if so if the value is 
+        %% null, remove the field from the insert so that tht db can 
+        %% apply the default
+        %%
         Vs2 = norm_utls:concat_bin([Vs
           ,type_to_sql(MetaValType,MapVal),<<",">>]),
         case lists:member(Key,Pk) of
