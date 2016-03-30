@@ -560,13 +560,14 @@ update(Model) ->
 sql_update(Model) ->
   Updates = lists:foldl(fun(Key,Acc) ->
     case Key of
-      <<"id">> -> <<"">>;
+      <<"id">> -> norm_utls:concat_bin([Acc,<<" ">>]);
       Field -> 
         Value = maps:get(Key,Model),
         Type = norm_utls:model_type(Field,Model),
-        norm_utls:concat_bin([Acc,<<" ">>,
+        Concat = norm_utls:concat_bin([Acc,<<" ">>,
           Field,
-          <<" = ">>,type_to_sql(Type,Value),<<",">>])
+          <<" = ">>,type_to_sql(Type,Value),<<",">>]),
+        Concat
     end 
   end,<<"">>,norm_utls:model_keys(Model)),
   Table = norm_utls:model_name(Model),
