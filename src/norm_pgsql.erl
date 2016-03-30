@@ -64,6 +64,24 @@ new(Name) ->
   ModelSpecName = maps:put(<<"name">>,Name,ModelSpec),
   maps:put(<<"__meta__">>,ModelSpecName,NullMap) end.
 
+
+%%
+%% @TODO Add null check
+%%
+new(Name,ModelNoMeta) ->
+  case new(Name) of
+    undefined -> undefined;
+    Model -> 
+      lists:foldl(fun(Field,ModelAcc) -> 
+        ModelNoMetaVal = maps:get(Field,ModelNoMeta,undefined),
+	if ModelNoMetaVal =:= undefined -> 
+          ModelAcc;
+        true -> 
+          maps:put(Field,ModelNoMetaVal,ModelAcc)
+        end 
+      end,Model,maps:keys(Model))
+  end.
+
 save(Model) -> 
   %% @todo id is hardcoded
   Id = maps:get(<<"id">>,Model,undefined),
