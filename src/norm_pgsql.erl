@@ -376,19 +376,35 @@ insert(ModelMap,Ops) ->
 %% update it.
  
 sql_insert(ModelMap,Ops) -> 
+
   ModelSpec = maps:get(<<"__meta__">>,ModelMap,#{}),
   ModelName = maps:get(<<"name">>,ModelSpec),
+
+  %% Get all columns composing the PK
   ModelFullSpec = maps:get(ModelName,?MODELS),
   ModelConstraints = maps:get(<<"constraints">>,ModelFullSpec),
-  Pk = case maps:get(<<"pk">>,ModelConstraints,undefined) of
+  PkCols = case maps:get(<<"pk">>,ModelConstraints,undefined) of
     undefined -> []; 
     Map -> maps:get(<<"fields">>,Map,[]) 
   end,
+
+  %% Check if the PK value was explicitly provided and assign one if it was not.
+  Model = lists:foldl(fun(Col,ModelAcc) -> 
+    HasPkVal = maps:get(Col,ModelAcc,undefined),
+    case no_value(HasPkVal) of
+      true ->
+        Id = get_next_id(ModelName,Col),
+        maps:update(Col,Id,ModelAcc);
+      false ->
+        ModelAcc
+    end
+  end,ModelMap,PkCols),
+
   {Fields,Values} = lists:foldl(fun(Key,{Fs,Vs}) -> 
     case Key of
       <<"__meta__">> -> {Fs,Vs};
       _ ->
-        MapVal = maps:get(Key,ModelMap,undefined),
+        MapVal = maps:get(Key,Model,undefined),	
         Fs2 = norm_utls:concat_bin([ Fs,Key,<<",">>]),
         MetaFields = maps:get(<<"fields">>,ModelSpec),
         MetaVal = maps:get(Key,MetaFields),
@@ -398,30 +414,10 @@ sql_insert(ModelMap,Ops) ->
         %% null, remove the field from the insert so that tht db can 
         %% apply the default
         %%
-        Vs2 = norm_utls:concat_bin([Vs
-          ,type_to_sql(MetaValType,MapVal),<<",">>]),
-        case lists:member(Key,Pk) of
-          true ->        
-            case no_value(MapVal) of
-              true -> {Fs,Vs};
-              false -> 
-                %% @todo add id value vs sequence value check 
-                %% SELECT MAX(the_primary_key) FROM the_table;
-                %%                   v              
-                %% SELECT nextval('the_primary_key_sequence');
-                %%
-                case lists:member(MetaValType,[<<"serial">>,<<"bigserial">>]) of 
-                  true -> norm_log:log_term(warning,"Ensure PK matches value r"
-                    "eturned by nextval('seq_name').");
-                  false -> []
-                end,
-               {Fs2,Vs2} 
-            end;
-          false ->
-            {Fs2,Vs2}
-        end
+        Vs2 = norm_utls:concat_bin([Vs,type_to_sql(MetaValType,MapVal),<<",">>]),
+       {Fs2,Vs2}
     end
-  end,{<<"">>,<<"">>},maps:keys(ModelMap)),
+  end,{<<"">>,<<"">>},maps:keys(Model)),
   FieldsS = strip_comma(Fields),
   ValuesS = strip_comma(Values),
   norm_utls:concat_bin([<<"INSERT INTO ">>,table_name(ModelName),<<" ( ">>
@@ -715,6 +711,14 @@ sql_to_type(_Type,Value) ->
 %% ----------------------------- UTILITIES ------------------------------------
 %% ----------------------------------------------------------------------------
 
+get_next_id(Table,Field) ->
+  Sql = norm_utls:concat_bin([<<"SELECT MAX( ">>,Field,<<" ) FROM ">>,
+    table_name(Table)]),
+  case ?SQUERY(Sql) of
+    {ok,_Col,[{null}]} -> 1;
+    {ok,_Col,[{Id}]} -> norm_utls:bin_to_num(Id) + 1
+  end.
+ 
 server_version() ->
   case ?SQUERY(sql_server_version()) of
     {ok,_Col,[{Version}]} -> {ok,norm_utls:bin_to_num(Version)};
