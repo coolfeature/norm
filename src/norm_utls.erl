@@ -202,7 +202,7 @@ format_date({{Year,Month,Day},_},'iso8601') ->
 format_datetime(DateTime,Format) ->
   Date = format_date(DateTime,Format),
   Time = format_time(DateTime,Format),
-  val_to_bin(Date ++ " " ++ Time).
+  val_to_bin(concat_bin([Date," ",Time])).
 
 %% @todo Get rid of strings - consider using dh_date
 
@@ -213,7 +213,8 @@ date_to_erlang(Date,'iso8601') ->
 %% @todo Get rid of strings - consider using dh_date
 
 time_to_erlang(Time,'iso8601') ->
-  [HMS,_SS] = re:split(Time,"\\.",[{return,list}]),
+  HMS = case string:rchr(Time, $.) of 0 -> Time; _Dotted ->
+  [HhMmSs,_SS] = re:split(Time,"\\.",[{return,list}]),HhMmSs end,
   [H,M,S] = re:split(HMS,":",[{return,list}]),
   {list_to_integer(H),list_to_integer(M),list_to_integer(S)}.
 
