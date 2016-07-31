@@ -30,10 +30,27 @@ insert_existing_test() ->
   User3 = maps:update(<<"password">>,<<"Password">>,User2),
   ?assertMatch({error,_},norm_pgsql:insert(User3)).
 
+insert_customer_test() ->  
+  Customer = norm_pgsql:new(<<"customer">>),
+  C1 = maps:update(<<"id">>,1,Customer),
+  C2 = maps:update(<<"factor">>,1.23,C1),
+  C3 = maps:update(<<"fname">>,<<"asdf">>,C2),
+  C4 = maps:update(<<"lname">>,<<"asdf">>,C3),
+  C5 = maps:update(<<"dob">>,calendar:local_time(),C4),
+  C6 = maps:update(<<"user_id">>,1,C5),
+  ?assertMatch({ok,_},norm_pgsql:insert(C6)).
+
+
 %% @private Select test
 
-select_by_id_test() ->
+select_user_by_id_test() ->
   ?assertMatch([_User],norm_pgsql:select(<<"user">>,1)).
+
+select_customer_by_id_test() ->
+  Customer = norm_pgsql:select(<<"customer">>,1),
+  ?debugFmt("Selected customer: ~p~n", [Customer]),
+  ?assertMatch([_Cust],Customer).
+
 
 select_by_where_test() ->
   ?assertMatch([_User],norm_pgsql:select(<<"user">>,#{ where => [{<<"password">>,'LIKE',"%ass%"}]})).
@@ -51,6 +68,7 @@ update_test() ->
 %% @private Delete test 
 
 delete_test() ->
+  ?assertMatch({ok,1},norm_pgsql:delete(<<"customer">>,1)),
   ?assertMatch({ok,1},norm_pgsql:delete(<<"user">>,1)).
 
 %% @private Drop tables

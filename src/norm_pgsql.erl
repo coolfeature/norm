@@ -225,6 +225,9 @@ field_to_sql(Name,FldSpec) ->
     <<"varchar">> ->
       Length = maps:get(<<"length">>,FldSpec,<<"50">>),
       norm_utls:concat_bin([<<" VARCHAR(">>,Length,<<")">>]);
+    <<"decimal">> ->
+      Scale = maps:get(<<"scale">>,FldSpec,<<"3,2">>),
+      norm_utls:concat_bin([<<" DECIMAL(">>,Scale,<<")">>]);
     <<"serial">> ->
       <<" SERIAL ">>;
     <<"bigserial">> ->

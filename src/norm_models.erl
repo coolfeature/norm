@@ -20,17 +20,18 @@ pgsql() ->
       <<"create_rank">> => <<"2">>
       ,<<"fields">> => #{
         <<"id">> => #{ <<"type">> => <<"bigserial">>, <<"null">> => <<"false">> }
+        ,<<"factor">> => #{ <<"type">> => <<"decimal">>, <<"scale">> => <<"3,2">>, <<"null">> => <<"false">>, <<"default">> => <<"1.67">> }
         ,<<"fname">> => #{ <<"type">> => <<"varchar">>, <<"length">> => <<"50">> }
         ,<<"mname">> => #{ <<"type">> => <<"varchar">>, <<"length">> => <<"50">> }
         ,<<"lname">> => #{  <<"type">> => <<"varchar">>, <<"length">> => <<"50">> }
         ,<<"dob">> => #{  <<"type">> => <<"date">> }
-        ,<<"customer_id">> => #{ <<"type">> => <<"bigint">>, <<"null">> => <<"false">> }
+        ,<<"user_id">> => #{ <<"type">> => <<"bigint">>, <<"null">> => <<"false">> }
       }
       ,<<"constraints">> => #{
         <<"pk">> => #{ <<"name">> => <<"pk_customer">>, <<"fields">> => [<<"id">>] }
         ,<<"fk">> => [ #{ 
             <<"references">> => #{ <<"table">> => <<"user">>, <<"fields">> => [<<"id">>] }
-            , <<"fields">> => [<<"customer_id">>] 
+            , <<"fields">> => [<<"user_id">>] 
           }]
       }
     }
