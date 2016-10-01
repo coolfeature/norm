@@ -40,7 +40,7 @@ start_pools(Dbs) ->
   end,[],Dbs).
 
 start_db_pools(Db,Pools) ->
-  WorkerName = list_to_atom(atom_to_list(norm) ++ "_" 
+  WorkerName = common_utils:ensure_atom(atom_to_list(norm) ++ "_" 
     ++ atom_to_list(Db) ++ "_worker"),
   lists:map(fun({Name,Args}) ->
     SizeArgs = norm_utls:get_value(pool_size,Args,undefined),

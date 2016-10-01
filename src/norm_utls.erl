@@ -39,7 +39,7 @@ root_dir() ->
 get_module(Db) ->
   Prefix = atom_to_list(?APP) ++ "_",
   case string:str(atom_to_list(Db),Prefix) of
-    0 -> list_to_atom(Prefix ++ atom_to_list(Db));
+    0 -> common_utils:ensure_atom(Prefix ++ atom_to_list(Db));
     1 -> Db;
     _ -> unknown_module
   end.
@@ -49,7 +49,7 @@ get_module() ->
     undefined -> {Db,_} = lists:nth(1,get_config(dbs)), Db;
     Module -> Module
   end,
-  list_to_atom(atom_to_list(?APP) ++ "_" ++ atom_to_list(M)).
+  common_utils:ensure_atom(atom_to_list(?APP) ++ "_" ++ atom_to_list(M)).
 
 enabled_dbs() ->
   lists:foldl(fun({Name,_Conf},Acc) -> 
