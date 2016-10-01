@@ -43,8 +43,8 @@ start_db_pools(Db,Pools) ->
   WorkerName = common_utils:ensure_atom(atom_to_list(norm) ++ "_" 
     ++ atom_to_list(Db) ++ "_worker"),
   lists:map(fun({Name,Args}) ->
-    SizeArgs = common_utils:get_values(pool_size,Args,undefined),
-    WorkerArgs = common_utils:get_values(worker_args,Args,undefined),
+    SizeArgs = common_utils:get_value(pool_size,Args,undefined),
+    WorkerArgs = common_utils:get_value(worker_args,Args,undefined),
     PoolArgs = [{name, {local, Name}},
       {worker_module, WorkerName}] ++ SizeArgs,
       poolboy:child_spec(Name,PoolArgs,WorkerArgs)

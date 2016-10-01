@@ -68,11 +68,11 @@ get_db_config(Db,Key,Default) ->
   end.
 
 get_db_config(Db,Key) ->
-  DbConfig = common_utils:get_values(Db,get_config(dbs),[]),
-  common_utils:get_values(Key,DbConfig,undefined).
+  DbConfig = common_utils:get_value(Db,get_config(dbs),[]),
+  common_utils:get_value(Key,DbConfig,undefined).
 
 set_db_config(Db,Key,Val) ->
-  DbConfig = common_utils:get_values(Db,get_config(dbs),[]),
+  DbConfig = common_utils:get_value(Db,get_config(dbs),[]),
   DbConfigUpdated = lists:keyreplace(tablespace,1,DbConfig,{tablespace,Val}), 
   NewDbs = lists:keyreplace(Key,1,DbConfig,{Key,DbConfigUpdated}),
   application:set_env(?APP,dbs,NewDbs).

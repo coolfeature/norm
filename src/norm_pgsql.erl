@@ -666,7 +666,7 @@ type_to_sql({Decimal,Opts},Value) when
            Decimal =:= <<"decimal">> 
     orelse Decimal =:= <<"float">> 
     orelse Decimal =:= <<"numeric">> ->
-  Decimals = common_utils:get_values(scale,Opts,0),
+  Decimals = common_utils:get_value(scale,Opts,0),
   norm_utls:val_to_bin({Value,Decimals});
 type_to_sql(<<"time">>,Value) ->
   norm_utls:quote([norm_utls:format_time(Value,'iso8601')]);
@@ -698,7 +698,7 @@ sql_to_type({Decimal,Opts},Value) when
            Decimal =:= <<"decimal">> 
     orelse Decimal =:= <<"float">> 
     orelse Decimal =:= <<"numeric">> ->
-  Decimals = common_utils:get_values(scale,Opts,0),
+  Decimals = common_utils:get_value(scale,Opts,0),
   norm_utls:bin_to_num({Value,Decimals});
 sql_to_type(<<"time">>,Value) ->
   norm_utls:time_to_erlang(Value,'iso8601');
