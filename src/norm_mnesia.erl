@@ -69,17 +69,17 @@ create_tables(Nodes) ->
     disc_copies ->
       case mnesia:create_schema(Nodes) of
 	ok ->
-	  norm_log:log_term(info,"Schema has been created " ++ LogMsg);
+	  log:debug("~p~n", ["Schema has been created " ++ LogMsg]);
 	{error, {_,{already_exists,_Node}}} ->
-	  norm_log:log_term(info,"Schema already exists on node.");
+	  log:debug("~p~n", ["Schema already exists on node."]);
 	{error, Error} ->
-	  norm_log:log_term(error,{?MODULE,?LINE,Error})
+	  log:error("~p~n",[{?MODULE, ?LINE, Error}])
       end;
     _ -> ok
   end,
   {ok,MnesiaPath} = application:get_env(mnesia,dir),
-  norm_log:log_term(info,"Mnesia DIR is: " ++ MnesiaPath),
-  norm_log:log_term(info,"Mnesia tables reside " ++ LogMsg),
+  log:info("~p~n", ["Mnesia DIR is: " ++ MnesiaPath]),
+  log:info("~p~n", ["Mnesia tables reside " ++ LogMsg]),
 
   %% Start Mnesia
   application:start(mnesia),
@@ -103,13 +103,13 @@ create_mnesia_table([{Name,Atts}|Specs],Created) ->
   case mnesia:create_table(Name,Atts) of
     {aborted,{already_exists,Table}} ->
       Result = Created ++ [{ok,{already_exists,Table}}],
-      norm_log:log_term(info,TableName ++ " already exists.");
+      log:info("~p~n",[TableName ++ " already exists."]);
     {atomic,ok} -> 
       Result = Created ++ [{ok,{atomic,ok}}],
-      norm_log:log_term(info,"Table " ++ TableName ++ " created.");
+      log:info("~p~n",["Table " ++ TableName ++ " created."]);
     Error -> 
       Result = Created ++ [{error,Error}],
-      norm_log:log_term(info,{"Could not create " ++ TableName,Error})
+      log:debug("~p~n",[{"Could not create " ++ TableName,Error}])
   end,
   create_mnesia_table(Specs,Result);
 create_mnesia_table([],Created) ->
@@ -203,7 +203,7 @@ limit(List,Max) when is_integer(Max) ->
 limit(List,undeifned) ->
   List;
 limit(List,_Limit) ->
-  norm_log:log_term(info,"Limit expects a number."),
+  log:debug("~p~n",["Limit expects a number."]),
   List.
 
 %% ------------------------------ DELETE --------------------------------------

@@ -33,7 +33,6 @@
 -define(EQUERY(Sql,Args),equery(Sql,Args)).
 -define(SCHEMA,get_schema()).
 -define(POOL,get_pool()).
--define(LOG(Level,Term),norm_log:log_term(Level,Term)).
 -define(MODELS,norm_utls:models(pgsql)).
 
 %% ----------------------------------------------------------------------------
@@ -50,7 +49,7 @@ init() ->
     ,{ok,commit} = commit()
   catch Error:Reason ->
     Rollback = rollback(),
-    ?LOG(info,[Error,Reason,Rollback]),
+    log:debug("~p ~p ~p~n",[Error,Reason,Rollback]),
     Rollback
   end.
 
@@ -123,7 +122,7 @@ drop_schema(Schema,Ops) ->
     case ?SQUERY(sql_drop_schema(Schema,Ops)) of
       {ok,_,_} -> {ok,{Schema,dropped}}; 
       Error ->
-        ?LOG(debug,Error),
+        log:debug("~p~n",[Error]),
         {error,{Schema,Error}}
     end; 
   {ok,false} -> {ok,{Schema,not_exists}} end.
@@ -143,7 +142,7 @@ create_schema(Schema) ->
     case ?SQUERY(sql_create_schema(Schema)) of
       {ok,_,_} -> {ok,{Schema,created}}; 
       Error -> 
-        ?LOG(debug,Error),
+        log:debug("~p~n",[Error]),
         {error,{Schema,Error}}
     end; 
   {ok,true} -> {ok,{Schema,exists}} end.
@@ -193,7 +192,7 @@ create_table(Name,Spec) when is_map(Spec) ->
   case ?SQUERY(sql_create_table(Name,Spec)) of
     {ok,_,_} -> {ok,{Name,created}};
     Error -> 
-      ?LOG(debug,Error),
+      log:debug("~p~n",[Error]),
       {error,{Name,Error}}
   end.
 
@@ -326,7 +325,7 @@ drop_table(Table) ->
   case ?SQUERY(Sql) of
     {ok,_,_} -> {ok,{Table,dropped}};
     Error -> 
-      ?LOG(debug,Error),
+      log:debug("~p~n",[Error]),
       {error,{Table,Error}}
   end. 
 
@@ -583,7 +582,7 @@ sql_update(Model) ->
 squery(Sql) ->
   squery(?POOL,Sql).
 squery(PoolName,Sql) ->
-  ?LOG(debug,Sql),
+  log:debug("~p~n",[Sql]),
   poolboy:transaction(PoolName,fun(Worker) ->
     gen_server:call(Worker,{squery,Sql})
   end).
@@ -591,7 +590,7 @@ squery(PoolName,Sql) ->
 equery(Sql,Params) ->
   equery(?POOL,Sql,Params).
 equery(PoolName,Sql,Params) ->
-  ?LOG(debug,[Sql,Params]),
+  log:debug("~p ~p~n",[Sql,Params]),
   poolboy:transaction(PoolName,fun(Worker) ->
     gen_server:call(Worker,{equery,Sql,Params})
   end).
@@ -667,7 +666,7 @@ type_to_sql({Decimal,Opts},Value) when
            Decimal =:= <<"decimal">> 
     orelse Decimal =:= <<"float">> 
     orelse Decimal =:= <<"numeric">> ->
-  Decimals = norm_utls:get_value(scale,Opts,0),
+  Decimals = common_utils:get_values(scale,Opts,0),
   norm_utls:val_to_bin({Value,Decimals});
 type_to_sql(<<"time">>,Value) ->
   norm_utls:quote([norm_utls:format_time(Value,'iso8601')]);
@@ -699,7 +698,7 @@ sql_to_type({Decimal,Opts},Value) when
            Decimal =:= <<"decimal">> 
     orelse Decimal =:= <<"float">> 
     orelse Decimal =:= <<"numeric">> ->
-  Decimals = norm_utls:get_value(scale,Opts,0),
+  Decimals = common_utils:get_values(scale,Opts,0),
   norm_utls:bin_to_num({Value,Decimals});
 sql_to_type(<<"time">>,Value) ->
   norm_utls:time_to_erlang(Value,'iso8601');
